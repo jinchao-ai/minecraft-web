@@ -878,23 +878,6 @@
       generateWorld();
       showMessage('旧存档已清除，正在生成新世界。');
       return false;
-      const data = JSON.parse(raw);
-      world = data.world;
-      Object.assign(inventory, data.inventory);
-      Object.assign(player, data.player, { vx: 0, vy: 0 });
-      time = data.time || 0.2;
-      mobs = data.mobs || [];
-      // ── 读取存档后强制清空所有毒气 ──
-      let cleared = 0;
-      for (let y = 0; y < WORLD_H; y++) {
-        for (let x = 0; x < WORLD_W; x++) {
-          if (world[y][x] === 'poison_gas') { world[y][x] = 'air'; cleared++; }
-        }
-      }
-      if (cleared > 0) showMessage('已清理存档中毒气 ' + cleared + ' 块！');
-
-      showMessage('已读取存档。');
-      return true;
     }
 
     function resetPlayer(full = true) {
@@ -2075,31 +2058,9 @@ showMessage('已在出生点重生 ☠️');
     document.getElementById('touchPlace').addEventListener('pointerdown', e => { e.preventDefault(); mouse.x = innerWidth / 2; mouse.y = innerHeight / 2; const t = targetFromPointer(); placeBlock(t.x, t.y); });
 
     resize();
-    const savedData = localStorage.getItem(SAVE_KEY);
-    if (savedData) {
-      try {
-        const data = JSON.parse(savedData);
-        // ── 存档加载时过滤毒气 ──
-        world = data.world;
-        let cleared = 0;
-        for (let y = 0; y < WORLD_H; y++) {
-          for (let x = 0; x < WORLD_W; x++) {
-            if (world[y][x] === 'poison_gas') { world[y][x] = 'air'; cleared++; }
-          }
-        }
-        if (cleared > 0) showMessage('已清理存档中毒气 ' + cleared + ' 块');
-        Object.assign(inventory, data.inventory);
-        Object.assign(player, data.player, { vx: 0, vy: 0 });
-        time = data.time || 0.18;
-        camera.x = player.x - innerWidth / 2;
-        camera.y = player.y - innerHeight / 2;
-        showMessage('存档已读取。');
-      } catch (e) {
-        generateWorld(true);
-      }
-    } else {
-      generateWorld(true);
-    }
+    // 直接删除旧存档（有毒气+地图尺寸不匹配），强制新世界
+    localStorage.removeItem(SAVE_KEY);
+    generateWorld(true);
     renderInventory();
     requestAnimationFrame(loop);
   </script>
