@@ -866,7 +866,7 @@
     }
 
     function saveGame() {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ world: world.map(r=>r.map(c=>c==='poison_gas'?'air':c)), inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
       showMessage('已保存世界。');
     }
 
@@ -879,6 +879,15 @@
       Object.assign(player, data.player, { vx: 0, vy: 0 });
       time = data.time || 0.2;
       mobs = data.mobs || [];
+      // ── 读取存档后强制清空所有毒气 ──
+      let cleared = 0;
+      for (let y = 0; y < WORLD_H; y++) {
+        for (let x = 0; x < WORLD_W; x++) {
+          if (world[y][x] === 'poison_gas') { world[y][x] = 'air'; cleared++; }
+        }
+      }
+      if (cleared > 0) showMessage('已清理存档中毒气 ' + cleared + ' 块！');
+
       showMessage('已读取存档。');
       return true;
     }
@@ -900,7 +909,7 @@
           }
         }
       }
-      showMessage('已在出生点重生 ☠️ 注意：地下深层有紫色毒气！');
+showMessage('已在出生点重生 ☠️');
     }
 
     function burst(x, y, color) {
@@ -1951,7 +1960,7 @@
       autoSaveTimer += dt;
       if (autoSaveTimer >= 30) {
         autoSaveTimer = 0;
-        localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
+        localStorage.setItem(SAVE_KEY, JSON.stringify({ world: world.map(r=>r.map(c=>c==='poison_gas'?'air':c)), inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
       }
       requestAnimationFrame(loop);
     }
@@ -2041,13 +2050,13 @@
 
     // 页面关闭/刷新时自动保存
     window.addEventListener('beforeunload', () => {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ world: world.map(r=>r.map(c=>c==='poison_gas'?'air':c)), inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
     });
 
     // 可见性变化时保存（切换标签页时）
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
+        localStorage.setItem(SAVE_KEY, JSON.stringify({ world: world.map(r=>r.map(c=>c==='poison_gas'?'air':c)), inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
       }
     });
 
