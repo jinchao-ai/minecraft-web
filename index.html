@@ -350,6 +350,9 @@
     let bossFireballs = [];
     let fireParticles = [];
     let bossSpawnAccum = 0;
+    let bees = [];
+    let beeStingers = [];
+    let beeSpawnAccum = 0;
 
     const player = {
       x: spawn.x, y: spawn.y, w: 21, h: 29, vx: 0, vy: 0,
@@ -785,6 +788,65 @@
         }
       }
       if (mobDmgAccum >= 1) mobDmgAccum = 0;
+      // 大黄蜂生成（每10秒从天上出现）
+      beeSpawnAccum += dt;
+      if (beeSpawnAccum >= 10 && bees.length < 20) {
+        beeSpawnAccum = 0;
+        const px = Math.floor(player.x / TILE);
+        const py = Math.floor(player.y / TILE);
+        // 出现在玩家附近天空
+        const bx = Math.max(1, Math.min(WORLD_W - 2, px + Math.floor(Math.random() * 9) - 4));
+        const by = Math.max(1, Math.min(15, py - 5));
+        bees.push({ x: bx * TILE, y: by * TILE, w: 24, h: 20, vx: 0, vy: 0, hp: 10, shootTimer: Math.random() * 2, moveTimer: 0, targetX: 0, targetY: 0 });
+        if (bees.length === 1) showMessage('🐝 大黄蜂来袭！');
+      }
+      // 大黄蜂行为
+      for (let i = bees.length - 1; i >= 0; i--) {
+        const b = bees[i];
+        b.moveTimer -= dt;
+        if (b.moveTimer <= 0) {
+          b.moveTimer = 1 + Math.random() * 2;
+          b.targetX = b.x + (Math.random() - 0.5) * TILE * 5;
+          b.targetY = b.y + (Math.random() - 0.5) * TILE * 4;
+          b.targetX = Math.max(0, Math.min(WORLD_W * TILE - b.w, b.targetX));
+          b.targetY = Math.max(TILE, Math.min(20 * TILE, b.targetY));
+        }
+        const ddx = b.targetX - b.x;
+        const ddy = b.targetY - b.y;
+        b.vx += ddx * 0.5;
+        b.vy += ddy * 0.5;
+        b.vx *= 0.92;
+        b.vy *= 0.92;
+        b.x += b.vx * dt;
+        b.y += b.vy * dt;
+        // 发射毒针
+        b.shootTimer -= dt;
+        if (b.shootTimer <= 0) {
+          b.shootTimer = 1.8 + Math.random();
+          const dx = player.x - b.x;
+          const dy = player.y - b.y;
+          const len = Math.max(1, Math.hypot(dx, dy));
+          beeStingers.push({ x: b.x + b.w / 2, y: b.y + b.h / 2, vx: dx / len * 180, vy: dy / len * 180, life: 3 });
+        }
+        // 蜜蜂被击杀
+        if (b.hp <= 0) { bees.splice(i, 1); showMessage('🐝 消灭大黄蜂！'); }
+      }
+      // 毒针移动与命中
+      for (let i = beeStingers.length - 1; i >= 0; i--) {
+        const s = beeStingers[i];
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        s.life -= dt;
+        // 命中玩家
+        if (Math.abs(s.x - player.x - player.w / 2) < 18 && Math.abs(s.y - player.y - player.h / 2) < 18) {
+          player.health = Math.max(0, player.health - 3);
+          if (Math.random() < 0.1) showMessage('💉 被毒针刺中！');
+          beeStingers.splice(i, 1);
+          continue;
+        }
+        // 落地消失
+        if (s.life <= 0 || s.y > WORLD_H * TILE) { beeStingers.splice(i, 1); }
+      }
       // Boss生成（地下y>30且从未生成过）
       bossSpawnAccum += dt;
       if (!boss && bossSpawnAccum >= 10) {
@@ -931,6 +993,7 @@
       ctx.translate(-Math.floor(camera.x), -Math.floor(camera.y));
       drawWorld(day);
       drawBoss(day);
+      drawBees(day);
       drawMobs(day);
       drawParticles();
       drawPlayer();
@@ -995,6 +1058,59 @@
             ctx.fillText(b.emoji, px + 6, py + 23);
           }
         }
+      }
+    }
+
+    function drawBees(day) {
+      // 毒针
+      ctx.fillStyle = '#88ff44';
+      for (const s of beeStingers) {
+        const sx = s.x - camera.x;
+        const sy = s.y - camera.y;
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(Math.atan2(s.vy, s.vx));
+        ctx.fillRect(-8, -2, 16, 4);
+        ctx.fillStyle = '#44cc22';
+        ctx.beginPath();
+        ctx.moveTo(8, 0);
+        ctx.lineTo(14, -3);
+        ctx.lineTo(14, 3);
+        ctx.fill();
+        ctx.restore();
+      }
+      // 大黄蜂
+      for (const b of bees) {
+        const sx = b.x - camera.x;
+        const sy = b.y - camera.y;
+        if (sx < -50 || sx > canvas.width + 50 || sy < -50 || sy > canvas.height + 50) continue;
+        ctx.save();
+        ctx.translate(sx + b.w / 2, sy + b.h / 2);
+        const facing = b.vx >= 0 ? 1 : -1;
+        if (facing < 0) ctx.scale(-1, 1);
+        // 翅膀
+        ctx.fillStyle = 'rgba(200,230,255,0.5)';
+        ctx.fillRect(-10, -14, 8, 8);
+        ctx.fillRect(2, -14, 8, 8);
+        // 身体
+        ctx.fillStyle = '#ffcc00';
+        ctx.fillRect(-10, -6, 20, 14);
+        // 条纹
+        ctx.fillStyle = '#111';
+        ctx.fillRect(-8, -4, 5, 10);
+        ctx.fillRect(3, -4, 5, 10);
+        // 头
+        ctx.fillStyle = '#aa8800';
+        ctx.beginPath();
+        ctx.arc(10, 0, 6, 0, Math.PI * 2);
+        ctx.fill();
+        // 眼
+        ctx.fillStyle = '#000';
+        ctx.fillRect(12, -2, 3, 3);
+        // 毒针
+        ctx.fillStyle = '#44cc22';
+        ctx.fillRect(-14, -1, 6, 2);
+        ctx.restore();
       }
     }
 
@@ -1239,6 +1355,19 @@
                 mobs.splice(i, 1);
                 showMessage('☠️ 击杀怪物！');
               }
+              hit = true;
+              break;
+            }
+          }
+        }
+        // 攻击大黄蜂
+        if (!hit) {
+          for (let i = bees.length - 1; i >= 0; i--) {
+            const b = bees[i];
+            if (cx >= b.x && cx <= b.x + b.w && cy >= b.y && cy <= b.y + b.h) {
+              const dmg = inventory.wood_pickaxe > 0 ? 5 : 2;
+              b.hp -= dmg;
+              showMessage('🐝 拍打大黄蜂！');
               hit = true;
               break;
             }
