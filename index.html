@@ -813,10 +813,10 @@
         beeSpawnAccum = 0;
         const px = Math.floor(player.x / TILE);
         const py = Math.floor(player.y / TILE);
-        // 出现在玩家附近天空
-        const bx = Math.max(1, Math.min(WORLD_W - 2, px + Math.floor(Math.random() * 9) - 4));
-        const by = Math.max(1, Math.min(15, py - 5));
-        bees.push({ x: bx * TILE, y: by * TILE, w: 24, h: 20, vx: 0, vy: 0, hp: 10, shootTimer: Math.random() * 2, moveTimer: 0, targetX: 0, targetY: 0 });
+        // 出现在玩家上方10-20格的天空
+        const bx = Math.max(1, Math.min(WORLD_W - 2, px + Math.floor(Math.random() * 9) - 4);
+        const by = Math.max(1, Math.min(Math.floor(WORLD_H / 2), py - 10 - Math.floor(Math.random() * 10)));
+        bees.push({ x: bx * TILE, y: by * TILE, w: 24, h: 20, vx: 0, vy: 0, hp: 10, shootTimer: Math.random() * 2, moveTimer: 0, targetX: 0, targetY: 0, baseY: by * TILE });
         if (bees.length === 1) showMessage('🐝 大黄蜂来袭！');
       }
       // 大黄蜂行为
@@ -825,10 +825,13 @@
         b.moveTimer -= dt;
         if (b.moveTimer <= 0) {
           b.moveTimer = 1 + Math.random() * 2;
-          b.targetX = b.x + (Math.random() - 0.5) * TILE * 5;
-          b.targetY = b.y + (Math.random() - 0.5) * TILE * 4;
-          b.targetX = Math.max(0, Math.min(WORLD_W * TILE - b.w, b.targetX));
-          b.targetY = Math.max(TILE, Math.min(WORLD_H * TILE - b.h, b.targetY));
+          const playerTy = Math.floor(player.y / TILE);
+          const beeMinY = Math.max(1, playerTy - 10 - Math.floor(Math.random() * 10));
+          const beeMaxY = Math.max(beeMinY + 1, playerTy - 10);
+          const beeY = Math.max(1, Math.min(Math.floor(WORLD_H / 2), beeMinY + Math.floor(Math.random() * (beeMaxY - beeMinY + 1));
+          const beeX = Math.max(1, Math.min(WORLD_W - 2, Math.floor(player.x / TILE) + Math.floor(Math.random() * 9) - 4);
+          b.targetX = beeX * TILE;
+          b.targetY = beeY * TILE;
         }
         const ddx = b.targetX - b.x;
         const ddy = b.targetY - b.y;
