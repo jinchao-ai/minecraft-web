@@ -920,6 +920,18 @@
 
     function update(dt) {
       time = (time + dt / 240) % 1;
+      // ── 30分钟自动锁定检测 ──
+      if (gameState === 'playing' && !isResting) {
+        const elapsed = Date.now() - parseInt(localStorage.getItem(gameStartKey) || Date.now().toString());
+        if (elapsed >= LOCK_DURATION_MS) {
+          const now = Date.now();
+          localStorage.setItem(LOCK_KEY + '_start', now.toString());
+          localStorage.setItem(LOCK_KEY + '_end', (now + 8 * 60 * 60 * 1000).toString()); // 强制休息8小时
+          restStartTime = now.toString(); restEndTime = (now + 8*60*60*1000).toString();
+          isResting = true; gameState = 'resting';
+          showMessage('⏰ 游戏时间到！进入休息状态...');
+        }
+      }
       // ── 睡觉跳过时间 ──
       if (player.sleepTimer > 0) {
         player.sleepTimer -= dt;
