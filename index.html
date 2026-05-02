@@ -880,15 +880,35 @@
             world[spotY][spotX] = 'poison_gas';
           }
         }
-        // 毒气蔓延
+        // 毒气蔓延：先统计每片大小，再限制最多10块
+        const clusterSeen = new Set();
+        const countCluster = (sx, sy) => {
+          const key = sx+','+sy;
+          if (clusterSeen.has(key)) return 0;
+          let count = 0;
+          const queue = [[sx,sy]];
+          clusterSeen.add(key);
+          while (queue.length) {
+            const [cx,cy] = queue.shift();
+            count++;
+            for (const [ddx,ddy] of [[0,-1],[0,1],[-1,0],[1,0]]) {
+              const nx=cx+ddx, ny=cy+ddy, nk=nx+','+ny;
+              if (!clusterSeen.has(nk)&&nx>=0&&nx<WORLD_W&&ny>=0&&ny<WORLD_H&&world[ny][nx]==='poison_gas') {
+                clusterSeen.add(nk); queue.push([nx,ny]);
+              }
+            }
+          }
+          return count;
+        };
         const newWorld2 = world.map(r => [...r]);
         for (let y = 0; y < WORLD_H; y++) {
           for (let x = 0; x < WORLD_W; x++) {
-            if (world[y][x] === 'poison_gas' && Math.random() < 0.3) {
-              const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
-              const [dx, dy] = dirs[Math.floor(Math.random() * dirs.length)];
-              const nx = x + dx, ny = y + dy;
-              if (nx >= 0 && nx < WORLD_W && ny >= 0 && ny < WORLD_H && newWorld2[ny][nx] === 'air') {
+            if (world[y][x] === 'poison_gas' && Math.random() < 0.35) {
+              if (countCluster(x, y) >= 10) continue;
+              const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
+              const [dx,dy] = dirs[Math.floor(Math.random() * dirs.length)];
+              const nx=x+dx, ny=y+dy;
+              if (nx>=0&&nx<WORLD_W&&ny>=0&&ny<WORLD_H&&newWorld2[ny][nx]==='air') {
                 newWorld2[ny][nx] = 'poison_gas';
               }
             }
