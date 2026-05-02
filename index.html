@@ -339,6 +339,7 @@
     let time = 0.18;
     let last = performance.now();
     let mineProgress = 0;
+    let miningCooldown = 0;
     let mineTarget = null;
     let messageTimer = 0;
     let waterTickAccum = 0;
@@ -576,17 +577,18 @@
       const same = mineTarget && mineTarget.x === tx && mineTarget.y === ty;
       if (!same) { mineTarget = { x: tx, y: ty }; mineProgress = 0; }
       const block = BLOCKS[type];
-      const toolBonus = inventory.wood_pickaxe > 0 && ['stone', 'coal', 'iron'].includes(type) ? 1.45 : 1;
-      mineProgress += dt * toolBonus * (player.stamina > 8 ? 1 : 0.55);
-      player.stamina = Math.max(0, player.stamina - dt * 2.3);
+      const toolBonus = inventory.wood_pickaxe > 0 && ['stone','coal','iron','copper','gold'].includes(type) ? 1.4 : 1;
+      mineProgress += 1; // 单击一次=1次命中
+      player.stamina = Math.max(0, player.stamina - 1.5);
       if (mineProgress >= block.hardness) {
         setBlock(tx, ty, 'air');
         inventory[type] = (inventory[type] || 0) + 1;
         if (type === 'leaves' && Math.random() < 0.34) inventory.apple++;
         burst(tx * TILE + TILE / 2, ty * TILE + TILE / 2, block.color);
         let msg = `获得 ${block.name}`;
-        if (type === 'coal') msg = '获得 煤矿 ×' + (inventory.coal || 0);
-        if (type === 'iron') msg = '获得 铁矿 ×' + (inventory.iron || 0);
+        if (type === 'coal') msg = '⛏️ 煤矿!';
+        if (type === 'iron') msg = '⛏️ 铁矿!';
+        if (['copper','gold','diamond','emerald'].includes(type)) msg = '⛏️ ' + block.name + '!'; // 矿石特有提示
         showMessage(msg);
         mineProgress = 0;
         mineTarget = null;
@@ -800,7 +802,8 @@
       if (player.hunger <= 0) player.health = Math.max(0, player.health - dt * 3.5);
       if (player.hunger > 70 && player.health < 100) player.health = Math.min(100, player.health + dt * 1.2);
       if (player.y > WORLD_H * TILE + 200 || player.health <= 0) resetPlayer(true);
-      if (mouse.down) mineAtPointer(dt);
+      miningCooldown = Math.max(0, miningCooldown - dt);
+      if (mouse.down && miningCooldown <= 0) { mineAtPointer(dt); miningCooldown = 0.15; }
       particles = particles.filter(p => {
         p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 260 * dt; return p.life > 0;
       });
@@ -1375,11 +1378,9 @@
           }
         }
         if (!hit) placeBlock(targetFromPointer().x, targetFromPointer().y);
-      } else {
-        mouse.down = true;
       }
     });
-    window.addEventListener('pointerup', () => { mouse.down = false; mineProgress = 0; mineTarget = null; });
+    window.addEventListener('pointerup', () => { mouse.down = false; });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
 
     // 页面关闭/刷新时自动保存
