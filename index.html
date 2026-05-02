@@ -394,14 +394,15 @@
       return a + (b - a) * t;
     }
 
-    // 一键清空所有毒气
-    (function clearPoisonGas() {
+    // 清空所有毒气
+    function clearPoisonGas() {
       let count = 0;
       for (let y = 0; y < WORLD_H; y++)
         for (let x = 0; x < WORLD_W; x++)
           if (world[y][x] === 'poison_gas') { world[y][x] = 'air'; count++; }
-      console.log('清空毒气 ' + count + ' 块');
-    })();
+      return count;
+    }
+    clearPoisonGas(); // 首次加载时清空
 
     function generateWorld(fresh = false) {
       world = Array.from({ length: WORLD_H }, () => Array(WORLD_W).fill('air'));
@@ -2007,6 +2008,8 @@
       try {
         const data = JSON.parse(savedData);
         world = data.world;
+        const cleared = clearPoisonGas();
+        if (cleared > 0) showMessage('已清理存档中毒气 ' + cleared + ' 块');
         Object.assign(inventory, data.inventory);
         Object.assign(player, data.player, { vx: 0, vy: 0 });
         time = data.time || 0.18;
