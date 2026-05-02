@@ -1343,6 +1343,38 @@
       drawParticles();
       drawPlayer();
       drawMinimap();
+      // ── 休息状态遮罩 ──
+      if (gameState === 'resting') {
+        ctx.fillStyle = 'rgba(5,5,15,0.88)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#c8a96e';
+        ctx.font = 'bold 28px "Microsoft YaHei"';
+        ctx.textAlign = 'center';
+        ctx.fillText('🌙 休息中...', canvas.width/2, canvas.height/2 - 60);
+        ctx.font = '18px "Microsoft YaHei"';
+        ctx.fillStyle = '#888';
+        const rStart = parseInt(localStorage.getItem(LOCK_KEY+'_start') || '0');
+        const rEnd   = parseInt(localStorage.getItem(LOCK_KEY+'_end')   || '0');
+        ctx.fillText('休息开始: ' + new Date(rStart).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}), canvas.width/2, canvas.height/2 - 20);
+        ctx.fillText('休息结束: ' + new Date(rEnd).toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit'}), canvas.width/2, canvas.height/2 + 8);
+        ctx.fillStyle = '#555';
+        ctx.font = '14px "Microsoft YaHei"';
+        ctx.fillText('（休息时间由系统控制，禁止刷新打断）', canvas.width/2, canvas.height/2 + 40);
+        ctx.textAlign = 'left';
+      }
+      // ── 剩余<5分钟时显示倒计时 ──
+      if (gameState === 'playing') {
+        const elapsed = Date.now() - parseInt(localStorage.getItem(gameStartKey) || Date.now().toString());
+        const remaining = LOCK_DURATION_MS - elapsed;
+        if (remaining > 0 && remaining < 5 * 60 * 1000) {
+          const mins = Math.ceil(remaining / 60000);
+          ctx.fillStyle = 'rgba(200,100,0,0.75)';
+          ctx.font = 'bold 14px "Microsoft YaHei"';
+          ctx.textAlign = 'right';
+          ctx.fillText('⏰ ' + mins + '分钟后休息', canvas.width - 10, 22);
+          ctx.textAlign = 'left';
+        }
+      }
       drawTarget();
       ctx.restore();
       if (day < 0.25) {
