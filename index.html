@@ -340,6 +340,7 @@
     let mineProgress = 0;
     let mineTarget = null;
     let messageTimer = 0;
+    let waterTickAccum = 0;
 
     const player = {
       x: spawn.x, y: spawn.y, w: 21, h: 29, vx: 0, vy: 0,
@@ -655,6 +656,22 @@
         p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 260 * dt; return p.life > 0;
       });
       for (const c of clouds) c.x = (c.x + dt * 10 * c.s) % (WORLD_W * TILE + 600);
+      // 水流下落
+      waterTickAccum += dt;
+      if (waterTickAccum >= 0.25) {
+        waterTickAccum = 0;
+        const newWorld = world.map(r => [...r]);
+        for (let y = WORLD_H - 2; y >= 0; y--) {
+          for (let x = 0; x < WORLD_W; x++) {
+            if (world[y][x] !== 'water') continue;
+            if (newWorld[y + 1][x] === 'air') {
+              newWorld[y + 1][x] = 'water';
+              newWorld[y][x] = 'air';
+            }
+          }
+        }
+        world = newWorld;
+      }
       updateCamera();
       updateHud();
     }
