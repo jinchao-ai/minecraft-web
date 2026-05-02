@@ -369,7 +369,10 @@
     let bees = [];
     let beeStingers = [];
     let beeSpawnAccum = 0;
-    let dayKilledMobs = false; // 白天已清怪标志，夜晚重置
+    let dayKilledMobs = false;
+    // 毒气周期：每60秒激活15秒
+    const POISON_ON = 15, POISON_CYCLE = 60;
+    let poisonCycleTimer = 0; // 白天已清怪标志，夜晚重置
 
     const player = {
       x: spawn.x, y: spawn.y, w: 21, h: 29, vx: 0, vy: 0,
@@ -929,6 +932,9 @@
         mobs = []; bees = [];
       }
       if (time > 0.72) dayKilledMobs = false; // 夜晚重置标志
+      // ── 毒气周期计时 ──
+      poisonCycleTimer = (poisonCycleTimer + dt) % POISON_CYCLE;
+      const poisonGasActive = poisonCycleTimer < POISON_ON;
       // ── 30分钟自动锁定检测 ──
       if (gameState === 'playing' && !isResting) {
         const elapsed = Date.now() - parseInt(localStorage.getItem(gameStartKey) || Date.now().toString());
@@ -1077,48 +1083,50 @@
           const b = world[py - i][px];
           if (b !== 'air' && b !== 'water' && b !== 'poison_gas') solidAbove++;
         }
-        if (solidAbove >= 5 && py > 5) {
+        if (poisonGasActive && solidAbove >= 5 && py > 5) {
           const spotX = Math.max(0, Math.min(WORLD_W - 1, px + Math.floor(Math.random() * 7) - 3));
           const spotY = Math.max(0, Math.min(WORLD_H - 1, py + Math.floor(Math.random() * 3)));
           if (world[spotY][spotX] === 'air') {
             world[spotY][spotX] = 'poison_gas';
           }
         }
-        // 毒气蔓延：先统计每片大小，再限制最多10块
-        const clusterSeen = new Set();
-        const countCluster = (sx, sy) => {
-          const key = sx+','+sy;
-          if (clusterSeen.has(key)) return 0;
-          let count = 0;
-          const queue = [[sx,sy]];
-          clusterSeen.add(key);
-          while (queue.length) {
-            const [cx,cy] = queue.shift();
-            count++;
-            for (const [ddx,ddy] of [[0,-1],[0,1],[-1,0],[1,0]]) {
-              const nx=cx+ddx, ny=cy+ddy, nk=nx+','+ny;
-              if (!clusterSeen.has(nk)&&nx>=0&&nx<WORLD_W&&ny>=0&&ny<WORLD_H&&world[ny][nx]==='poison_gas') {
-                clusterSeen.add(nk); queue.push([nx,ny]);
+        // 毒气蔓延：先统计每片大小，再限制最多10块（仅在激活时）
+        if (poisonGasActive) {
+          const clusterSeen = new Set();
+          const countCluster = (sx, sy) => {
+            const key = sx+','+sy;
+            if (clusterSeen.has(key)) return 0;
+            let count = 0;
+            const queue = [[sx,sy]];
+            clusterSeen.add(key);
+            while (queue.length) {
+              const [cx,cy] = queue.shift();
+              count++;
+              for (const [ddx,ddy] of [[0,-1],[0,1],[-1,0],[1,0]]) {
+                const nx=cx+ddx, ny=cy+ddy, nk=nx+','+ny;
+                if (!clusterSeen.has(nk)&&nx>=0&&nx<WORLD_W&&ny>=0&&ny<WORLD_H&&world[ny][nx]==='poison_gas') {
+                  clusterSeen.add(nk); queue.push([nx,ny]);
+                }
+              }
+            }
+            return count;
+          };
+          const newWorld2 = world.map(r => [...r]);
+          for (let y = 0; y < WORLD_H; y++) {
+            for (let x = 0; x < WORLD_W; x++) {
+              if (world[y][x] === 'poison_gas' && Math.random() < 0.35) {
+                if (countCluster(x, y) >= 10) continue;
+                const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
+                const [dx,dy] = dirs[Math.floor(Math.random() * dirs.length)];
+                const nx=x+dx, ny=y+dy;
+                if (nx>=0&&nx<WORLD_W&&ny>=0&&ny<WORLD_H&&newWorld2[ny][nx]==='air') {
+                  newWorld2[ny][nx] = 'poison_gas';
+                }
               }
             }
           }
-          return count;
-        };
-        const newWorld2 = world.map(r => [...r]);
-        for (let y = 0; y < WORLD_H; y++) {
-          for (let x = 0; x < WORLD_W; x++) {
-            if (world[y][x] === 'poison_gas' && Math.random() < 0.35) {
-              if (countCluster(x, y) >= 10) continue;
-              const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
-              const [dx,dy] = dirs[Math.floor(Math.random() * dirs.length)];
-              const nx=x+dx, ny=y+dy;
-              if (nx>=0&&nx<WORLD_W&&ny>=0&&ny<WORLD_H&&newWorld2[ny][nx]==='air') {
-                newWorld2[ny][nx] = 'poison_gas';
-              }
-            }
-          }
+          world = newWorld2;
         }
-        world = newWorld2;
         // 玩家接触毒气扣血
         const pbx = Math.floor(player.x / TILE);
         const pby = Math.floor(player.y / TILE);
