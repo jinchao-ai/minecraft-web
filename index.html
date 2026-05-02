@@ -1268,7 +1268,7 @@
         s.x += s.vx * dt; s.y += s.vy * dt; s.life -= dt;
         if (s.life <= 0) { beeStingers.splice(i, 1); continue; }
         const sbx = Math.floor(s.x / TILE), sby = Math.floor(s.y / TILE);
-        if (sbx >= 0 && sbx < WORLD_W && sby >= 0 && sby < WORLD_H && world[sby][sbx] !== 'air') { beeStingers.splice(i, 1); continue; }
+        if (sbx >= 0 && sbx < WORLD_W && sby >= 0 && sby < WORLD_H && BLOCKS[world[sby][sbx]] && BLOCKS[world[sby][sbx]].solid) { beeStingers.splice(i, 1); continue; }
         if (Math.abs(s.x - player.x) < (player.w + 8) * 0.5 && Math.abs(s.y - player.y) < (player.h + 8) * 0.5) { player.health = Math.max(0, player.health - 3); beeStingers.splice(i, 1); }
       }
       // Boss已取消
