@@ -310,6 +310,15 @@
       grass: { emoji: '🌿', color: '#5c9f38', solid: true, hardness: 1, name: '草方块' },
       dirt: { emoji: '🟫', color: '#8a5a32', solid: true, hardness: 1, name: '泥土' },
       stone: { emoji: '⬛', color: '#787b78', solid: true, hardness: 2.4, name: '石头' },
+      maze_brick: { emoji: '🧱', color: '#8a6a52', solid: true, hardness: 99, name: '迷宫砖' },
+      coal: { emoji: '◼', color: '#3c3d3d', solid: true, hardness: 3, name: '煤矿' },
+      iron: { emoji: '▣', color: '#a98062', solid: true, hardness: 3.4, name: '铁矿' },
+      copper: { emoji: '🔶', color: '#c87533', solid: true, hardness: 3.6, name: '铜矿' },
+      gold: { emoji: '⭐', color: '#fdd835', solid: true, hardness: 3.8, name: '金矿' },
+      diamond: { emoji: '💎', color: '#00e5ff', solid: true, hardness: 4.5, name: '钻石' },
+      emerald: { emoji: '💚', color: '#00c853', solid: true, hardness: 4.5, name: '绿宝石' },
+      lava: { emoji: '🔥', color: '#ff4500', solid: true, hardness: 4, name: '岩浆' },
+      treasure: { emoji: '📦', color: '#ffd700', solid: false, hardness: 0, name: '宝箱' },
       wood: { emoji: '🪵', color: '#8f5b2c', solid: true, hardness: 1.7, name: '原木' },
       leaves: { emoji: '🍃', color: '#3f8737', solid: true, hardness: 0.7, name: '树叶' },
       sand: { emoji: '🟨', color: '#d6bb6a', solid: true, hardness: 0.8, name: '沙子' },
@@ -444,7 +453,7 @@
                 const nx = cx + dx, ny = cy + dy;
                 if (nx > 0 && nx < WORLD_W - 1 && ny > 35 && ny < WORLD_H - 1) {
                   const b = world[ny][nx];
-                  if (b !== 'air' && b !== 'water' && b !== 'lava' && b !== 'treasure') world[ny][nx] = 'air';
+                  if (b !== 'air' && b !== 'water' && b !== 'lava' && b !== 'treasure' && b !== 'maze_brick') world[ny][nx] = 'air';
                 }
               }
             }
@@ -456,10 +465,10 @@
             cx2 += Math.floor(Math.random() * 3) - 1;
             cy2 += Math.floor(Math.random() * 3) - 1;
             if (cx2 > 1 && cx2 < WORLD_W - 1 && cy2 > 35 && cy2 < WORLD_H - 1) {
-              if (world[cy2][cx2] !== 'lava' && world[cy2][cx2] !== 'treasure') world[cy2][cx2] = 'air';
+              if (world[cy2][cx2] !== 'lava' && world[cy2][cx2] !== 'treasure' && world[cy2][cx2] !== 'maze_brick') world[cy2][cx2] = 'air';
               // 通道宽一些
               for (let w = -1; w <= 1; w++) {
-                if (world[cy2 + w] && world[cy2 + w][cx2] !== 'lava' && world[cy2 + w][cx2] !== 'treasure') world[cy2 + w][cx2] = 'air';
+                if (world[cy2 + w] && world[cy2 + w][cx2] !== 'lava' && world[cy2 + w][cx2] !== 'treasure' && world[cy2 + w][cx2] !== 'maze_brick') world[cy2 + w][cx2] = 'air';
               }
             }
           }
@@ -505,7 +514,7 @@
                     for (let ddy = 0; ddy < cellSize; ddy++) {
                       const bx = wx + ddx, by = wy + ddy;
                       if (bx > 0 && bx < WORLD_W - 1 && by > 0 && by < WORLD_H - 1) {
-                        if (world[by][bx] !== 'lava' && world[by][bx] !== 'treasure') world[by][bx] = 'air';
+                        if (world[by][bx] !== 'lava' && world[by][bx] !== 'treasure' && world[by][bx] !== 'maze_brick') world[by][bx] = 'air';
                       }
                     }
                   }
@@ -536,6 +545,32 @@
       // ══════════════════════════════════════
       //  宝箱奖励
       // ══════════════════════════════════════
+      function findNearestTreasure() {
+        let best = { dist: Infinity, dx: 0, dy: 0 };
+        const px = Math.floor(player.x / TILE), py = Math.floor(player.y / TILE);
+        for (let y = 0; y < WORLD_H; y++) {
+          for (let x = 0; x < WORLD_W; x++) {
+            if (world[y][x] === 'treasure') {
+              const d = Math.sqrt((x - px) ** 2 + (y - py) ** 2);
+              if (d < best.dist) best = { dist: d, dx: x - px, dy: y - py };
+            }
+          }
+        }
+        return best;
+      }
+      function compassArrow(angle) {
+        // 0=东 90=南 180=西 270=北
+        if (angle > -22 && angle <= 22) return '→东';
+        if (angle > 22 && angle <= 67) return '↘东南';
+        if (angle > 67 && angle <= 112) return '↓南';
+        if (angle > 112 && angle <= 157) return '↙西南';
+        if (angle > 157 || angle <= -157) return '←西';
+        if (angle > -157 && angle <= -112) return '↙西南';
+        if (angle > -112 && angle <= -67) return '↑北';
+        if (angle > -67 && angle <= -22) return '↗东北';
+        return '?';
+      }
+
       function openTreasure() {
         if (getBlock(Math.floor(player.x / TILE), Math.floor(player.y / TILE) - 1) === 'treasure') {
           const roll = Math.random();
@@ -586,10 +621,10 @@
         inventory[type] = (inventory[type] || 0) + 1;
         if (type === 'leaves' && Math.random() < 0.34) inventory.apple++;
         burst(tx * TILE + TILE / 2, ty * TILE + TILE / 2, block.color);
-        let msg = `获得 ${block.name}`;
-        if (type === 'coal') msg = '⛏️ 煤矿!';
-        if (type === 'iron') msg = '⛏️ 铁矿!';
-        if (['copper','gold','diamond','emerald'].includes(type)) msg = '⛏️ ' + block.name + '!'; // 矿石特有提示
+        let msg = '⛏️ 获得 ' + block.name + '!';
+        if (['coal','iron','copper','gold','diamond','emerald'].includes(type)) {
+          msg = '⛏️ ' + block.name + '!';
+        }
         showMessage(msg);
         mineProgress = 0;
         mineTarget = null;
