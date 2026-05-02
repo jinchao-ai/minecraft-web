@@ -280,7 +280,7 @@
     <div class="crosshair"></div>
     <section class="card inventory" id="inventory"></section>
     <section class="card help">
-      <p><b>操作</b> WASD移动，空格跳跃，Shift疾跑。左键挖掘，右键攻击怪物/放置方块。</p>
+      <p><b>操作</b> WASD移动，空格跳跃，Shift疾跑。左键挖掘，右键攻击怪物/Boss/放置方块。</p>
       <p>1-9/0/-选择快捷栏，E木板，Q工作台，T工作台合成，F吃苹果。</p>
       <p><b>合成</b> 原木→木板(E)→木板→工作台(Q)→木棍/木镐/火把(T)</p>
     </section>
@@ -315,6 +315,7 @@
       sand: { emoji: '🟨', color: '#d6bb6a', solid: true, hardness: 0.8, name: '沙子' },
       water: { emoji: '💧', color: 'rgba(64, 145, 214, 0.62)', solid: false, hardness: 0, name: '水' },
       poison_gas: { emoji: '☠️', color: 'rgba(128, 0, 128, 0.65)', solid: false, hardness: 0, name: '毒气' },
+      fire: { emoji: '🔥', color: '#ff6a00', solid: false, hardness: 0, name: '火焰' },
       coal: { emoji: '◼', color: '#3c3d3d', solid: true, hardness: 3, name: '煤矿' },
       iron: { emoji: '▣', color: '#a98062', solid: true, hardness: 3.4, name: '铁矿' },
       plank: { emoji: '▤', color: '#b77a38', solid: true, hardness: 1.2, name: '木板' },
@@ -345,6 +346,10 @@
     let mobs = [];
     let mobSpawnAccum = 0;
     let mobDmgAccum = 0;
+    let boss = null;
+    let bossFireballs = [];
+    let fireParticles = [];
+    let bossSpawnAccum = 0;
 
     const player = {
       x: spawn.x, y: spawn.y, w: 21, h: 29, vx: 0, vy: 0,
@@ -561,7 +566,7 @@
     }
 
     function saveGame() {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs }));
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
       showMessage('已保存世界。');
     }
 
@@ -780,6 +785,109 @@
         }
       }
       if (mobDmgAccum >= 1) mobDmgAccum = 0;
+      // Boss生成（地下y>30且从未生成过）
+      bossSpawnAccum += dt;
+      if (!boss && bossSpawnAccum >= 10) {
+        bossSpawnAccum = 0;
+        const px = Math.floor(player.x / TILE);
+        const py = Math.floor(player.y / TILE);
+        if (py > 30) {
+          const bx = Math.max(1, Math.min(WORLD_W - 2, px + Math.floor(Math.random() * 15) - 7));
+          const by = Math.max(31, Math.min(WORLD_H - 2, py + Math.floor(Math.random() * 10) - 5));
+          boss = { x: bx * TILE, y: by * TILE, w: 36, h: 40, vx: 0, vy: 0, hp: 300, fireAccum: 0, fireDir: 0, invincible: 0 };
+          showMessage('💀 BOSS出现！');
+        }
+      }
+      // Boss行为
+      if (boss) {
+        boss.invincible = Math.max(0, boss.invincible - dt);
+        const dx = player.x - boss.x;
+        const dy = player.y - boss.y;
+        const dist = Math.hypot(dx, dy);
+        // 移向玩家
+        if (dist > 80) {
+          boss.vx += Math.sign(dx) * 200 * dt;
+          boss.vx *= 0.9;
+          boss.x += boss.vx * dt;
+        }
+        // 重力
+        boss.vy += 600 * dt;
+        boss.vy = Math.min(boss.vy, 400);
+        boss.y += boss.vy * dt;
+        // 碰撞地面
+        const bmy1 = Math.floor(boss.y / TILE);
+        const bmy2 = Math.floor((boss.y + boss.h) / TILE);
+        const bmx1 = Math.floor((boss.x + 6) / TILE);
+        const bmx2 = Math.floor((boss.x + boss.w - 6) / TILE);
+        if (world[bmy2] && world[bmy2][bmx1] !== 'air' && world[bmy2][bmx1] !== 'water' && world[bmy2][bmx1] !== 'poison_gas' && world[bmy2][bmx1] !== 'fire') {
+          boss.y = bmy2 * TILE - boss.h;
+          boss.vy = 0;
+        }
+        // 喷火
+        boss.fireAccum += dt;
+        if (boss.fireAccum >= 2.5) {
+          boss.fireAccum = 0;
+          boss.fireDir = dx > 0 ? 1 : -1;
+          const bx = Math.floor((boss.x + boss.w / 2) / TILE);
+          const by = Math.floor((boss.y + boss.h / 2) / TILE);
+          const dir = boss.fireDir;
+          // 沿水平方向喷射火焰，最多20格，融化遇到的方块
+          for (let i = 1; i <= 20; i++) {
+            const fx = bx + dir * i;
+            const fy = by + Math.floor(Math.random() * 3) - 1; // 上下轻微飘动
+            if (fx < 0 || fx >= WORLD_W || fy < 0 || fy >= WORLD_H) break;
+            const bt = world[fy][fx];
+            if (bt !== 'air' && bt !== 'fire' && bt !== 'poison_gas' && bt !== 'water') {
+              // 融化方块（两侧各一格）
+              world[fy][fx] = 'air';
+              if (fy + 1 < WORLD_H && world[fy + 1][fx] !== 'air' && world[fy + 1][fx] !== 'fire') {
+                if (Math.random() < 0.5) world[fy + 1][fx] = 'air';
+              }
+              if (fy - 1 >= 0 && world[fy - 1][fx] !== 'air' && world[fy - 1][fx] !== 'fire') {
+                if (Math.random() < 0.5) world[fy - 1][fx] = 'air';
+              }
+              break;
+            }
+          }
+          // 添加火焰轨迹粒子
+          for (let i = 1; i <= 12; i++) {
+            fireParticles.push({ x: (bx + dir * i) * TILE + TILE / 2, y: by * TILE + TILE / 2, life: 1.5, vx: dir * 80 + (Math.random() - 0.5) * 30, vy: (Math.random() - 0.5) * 60 });
+          }
+        }
+        // Boss接触玩家扣血
+        if (mobDmgAccum >= 1) {
+          if (Math.abs(boss.x - player.x) < (boss.w + player.w) * 0.55 && Math.abs(boss.y - player.y) < (boss.h + player.h) * 0.55) {
+            player.health = Math.max(0, player.health - 8);
+            if (Math.random() < 0.15) showMessage('💀 BOSS攻击！');
+          }
+        }
+        // Boss被击杀
+        if (boss.hp <= 0) {
+          showMessage('🏆 BOSS击杀！');
+          boss = null;
+        }
+      }
+      // 火焰粒子更新
+      for (let i = fireParticles.length - 1; i >= 0; i--) {
+        fireParticles[i].life -= dt;
+        fireParticles[i].x += fireParticles[i].vx * dt;
+        fireParticles[i].y += fireParticles[i].vy * dt;
+        fireParticles[i].vy += 30 * dt;
+        if (fireParticles[i].life <= 0) fireParticles.splice(i, 1);
+      }
+      // 玩家接触火焰扣血
+      if (mobDmgAccum >= 1) {
+        const pbx = Math.floor(player.x / TILE);
+        const pby = Math.floor(player.y / TILE);
+        for (let dy = 0; dy <= 1; dy++) {
+          for (let dx = 0; dx <= 1; dx++) {
+            if (world[pby + dy] && (world[pby + dy][pbx + dx] === 'fire' || fireParticles.some(f => Math.abs(f.x - player.x) < 30 && Math.abs(f.y - player.y) < 30))) {
+              player.health = Math.max(0, player.health - 3);
+              break;
+            }
+          }
+        }
+      }
       updateCamera();
       updateHud();
     }
@@ -822,6 +930,7 @@
       ctx.save();
       ctx.translate(-Math.floor(camera.x), -Math.floor(camera.y));
       drawWorld(day);
+      drawBoss(day);
       drawMobs(day);
       drawParticles();
       drawPlayer();
@@ -886,6 +995,44 @@
             ctx.fillText(b.emoji, px + 6, py + 23);
           }
         }
+      }
+    }
+
+    function drawBoss(day) {
+      if (!boss) return;
+      const sx = boss.x - camera.x;
+      const sy = boss.y - camera.y;
+      if (sx < -100 || sx > canvas.width + 100 || sy < -100 || sy > canvas.height + 100) return;
+      ctx.save();
+      // 身体
+      ctx.fillStyle = '#8b0000';
+      ctx.fillRect(sx, sy + 8, boss.w, boss.h - 8);
+      // 头
+      ctx.fillStyle = '#cc1111';
+      ctx.fillRect(sx + 4, sy, boss.w - 8, 18);
+      // 角
+      ctx.fillStyle = '#333';
+      ctx.fillRect(sx + 4, sy - 8, 6, 10);
+      ctx.fillRect(sx + boss.w - 10, sy - 8, 6, 10);
+      // 眼睛
+      ctx.fillStyle = '#ffff00';
+      ctx.fillRect(sx + 10, sy + 6, 6, 6);
+      ctx.fillRect(sx + boss.w - 16, sy + 6, 6, 6);
+      // 血条背景
+      ctx.fillStyle = '#333';
+      ctx.fillRect(sx - 2, sy - 18, boss.w + 4, 8);
+      // 血条
+      ctx.fillStyle = '#ff0000';
+      ctx.fillRect(sx, sy - 16, boss.w * (boss.hp / 300), 4);
+      ctx.restore();
+      // 火焰粒子
+      for (const f of fireParticles) {
+        const fsx = f.x - camera.x;
+        const fsy = f.y - camera.y;
+        ctx.fillStyle = `rgba(255,${100 + Math.random() * 100},0,${f.life})`;
+        ctx.beginPath();
+        ctx.arc(fsx, fsy, 4 + f.life * 3, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
 
@@ -1026,7 +1173,7 @@
       autoSaveTimer += dt;
       if (autoSaveTimer >= 30) {
         autoSaveTimer = 0;
-        localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs }));
+        localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
       }
       requestAnimationFrame(loop);
     }
@@ -1069,22 +1216,32 @@
     canvas.addEventListener('pointerdown', e => {
       mouse.x = e.clientX; mouse.y = e.clientY;
       if (e.button === 2) {
-        // 右键：优先攻击怪物，否则放置方块
         const cx = mouse.x + camera.x;
         const cy = mouse.y + camera.y;
         let hit = false;
-        for (let i = mobs.length - 1; i >= 0; i--) {
-          const m = mobs[i];
-          if (cx >= m.x && cx <= m.x + m.w && cy >= m.y && cy <= m.y + m.h) {
-            const dmg = inventory.wood_pickaxe > 0 ? 12 : 6;
-            m.hp -= dmg;
-            showMessage('⚔️ 攻击！-' + dmg);
-            if (m.hp <= 0) {
-              mobs.splice(i, 1);
-              showMessage('☠️ 击杀怪物！');
+        // 优先攻击Boss
+        if (boss && cx >= boss.x && cx <= boss.x + boss.w && cy >= boss.y && cy <= boss.y + boss.h && boss.invincible <= 0) {
+          const dmg = inventory.wood_pickaxe > 0 ? 18 : 9;
+          boss.hp -= dmg;
+          boss.invincible = 0.3;
+          showMessage('🔥 攻击BOSS！-' + dmg + ' HP:' + boss.hp + '/300');
+          hit = true;
+        }
+        // 攻击普通怪物
+        if (!hit) {
+          for (let i = mobs.length - 1; i >= 0; i--) {
+            const m = mobs[i];
+            if (cx >= m.x && cx <= m.x + m.w && cy >= m.y && cy <= m.y + m.h) {
+              const dmg = inventory.wood_pickaxe > 0 ? 12 : 6;
+              m.hp -= dmg;
+              showMessage('⚔️ 攻击！-' + dmg);
+              if (m.hp <= 0) {
+                mobs.splice(i, 1);
+                showMessage('☠️ 击杀怪物！');
+              }
+              hit = true;
+              break;
             }
-            hit = true;
-            break;
           }
         }
         if (!hit) placeBlock(targetFromPointer().x, targetFromPointer().y);
@@ -1097,13 +1254,13 @@
 
     // 页面关闭/刷新时自动保存
     window.addEventListener('beforeunload', () => {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs }));
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
     });
 
     // 可见性变化时保存（切换标签页时）
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs }));
+        localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
       }
     });
 
