@@ -314,6 +314,7 @@
       leaves: { emoji: '🍃', color: '#3f8737', solid: true, hardness: 0.7, name: '树叶' },
       sand: { emoji: '🟨', color: '#d6bb6a', solid: true, hardness: 0.8, name: '沙子' },
       water: { emoji: '💧', color: 'rgba(64, 145, 214, 0.62)', solid: false, hardness: 0, name: '水' },
+      poison_gas: { emoji: '☠️', color: 'rgba(128, 0, 128, 0.65)', solid: false, hardness: 0, name: '毒气' },
       coal: { emoji: '◼', color: '#3c3d3d', solid: true, hardness: 3, name: '煤矿' },
       iron: { emoji: '▣', color: '#a98062', solid: true, hardness: 3.4, name: '铁矿' },
       plank: { emoji: '▤', color: '#b77a38', solid: true, hardness: 1.2, name: '木板' },
@@ -340,6 +341,7 @@
     let mineTarget = null;
     let messageTimer = 0;
     let waterTickAccum = 0;
+    let poisonTickAccum = 0;
 
     const player = {
       x: spawn.x, y: spawn.y, w: 21, h: 29, vx: 0, vy: 0,
@@ -665,14 +667,61 @@
         const newWorld = world.map(r => [...r]);
         for (let y = WORLD_H - 2; y >= 0; y--) {
           for (let x = 0; x < WORLD_W; x++) {
-            if (world[y][x] !== 'water') continue;
-            if (newWorld[y + 1][x] === 'air') {
+            if (world[y][x] === 'water' && newWorld[y + 1][x] === 'air') {
               newWorld[y + 1][x] = 'water';
               newWorld[y][x] = 'air';
             }
           }
         }
         world = newWorld;
+      }
+      // 毒气生成与蔓延（每10秒）
+      poisonTickAccum = (poisonTickAccum || 0) + dt;
+      if (poisonTickAccum >= 10) {
+        poisonTickAccum = 0;
+        const px = Math.floor(player.x / TILE);
+        const py = Math.floor(player.y / TILE);
+        // 地下判定：头顶有5格以上实心方块即为深处
+        let solidAbove = 0;
+        for (let i = 1; i <= 10; i++) {
+          if (py - i < 0) break;
+          const b = world[py - i][px];
+          if (b !== 'air' && b !== 'water' && b !== 'poison_gas') solidAbove++;
+        }
+        if (solidAbove >= 5 && py > 5) {
+          const spotX = Math.max(0, Math.min(WORLD_W - 1, px + Math.floor(Math.random() * 7) - 3));
+          const spotY = Math.max(0, Math.min(WORLD_H - 1, py + Math.floor(Math.random() * 3)));
+          if (world[spotY][spotX] === 'air') {
+            world[spotY][spotX] = 'poison_gas';
+          }
+        }
+        // 毒气蔓延
+        const newWorld2 = world.map(r => [...r]);
+        for (let y = 0; y < WORLD_H; y++) {
+          for (let x = 0; x < WORLD_W; x++) {
+            if (world[y][x] === 'poison_gas' && Math.random() < 0.3) {
+              const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
+              const [dx, dy] = dirs[Math.floor(Math.random() * dirs.length)];
+              const nx = x + dx, ny = y + dy;
+              if (nx >= 0 && nx < WORLD_W && ny >= 0 && ny < WORLD_H && newWorld2[ny][nx] === 'air') {
+                newWorld2[ny][nx] = 'poison_gas';
+              }
+            }
+          }
+        }
+        world = newWorld2;
+        // 玩家接触毒气扣血
+        const pbx = Math.floor(player.x / TILE);
+        const pby = Math.floor(player.y / TILE);
+        for (let dy = 0; dy <= 1; dy++) {
+          for (let dx = 0; dx <= 1; dx++) {
+            if (world[pby + dy] && world[pby + dy][pbx + dx] === 'poison_gas') {
+              player.health = Math.max(0, player.health - 0.8);
+              if (Math.random() < 0.03) showMessage('☠️ 毒气侵蚀！');
+              break;
+            }
+          }
+        }
       }
       updateCamera();
       updateHud();
