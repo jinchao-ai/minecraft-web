@@ -811,6 +811,12 @@
           const bmy2 = Math.floor((b.y + b.h) / TILE), bmx = Math.floor((b.x + b.w / 2) / TILE);
           if (bmy2 >= 0 && bmy2 < WORLD_H && bmx >= 0 && bmx < WORLD_W && world[bmy2][bmx] !== 'air') { b.vy = 0; b.y = bmy2 * TILE - b.h; }
           if (bdist < (b.w + player.w) * 0.7) player.health = Math.max(0, player.health - 0.5 * dt);
+          // 落地也能射
+          b.shootTimer -= dt;
+          if (b.shootTimer <= 0 && bdist < TILE * 15) {
+            b.shootTimer = 1.8 + Math.random();
+            beeStingers.push({ x: b.x + b.w / 2, y: b.y + b.h / 2, vx: bdx / Math.max(1, bdist) * 180, vy: bdy / Math.max(1, bdist) * 180, life: 3 });
+          }
         } else {
           b.moveTimer -= dt;
           if (b.moveTimer <= 0) {
@@ -985,6 +991,8 @@
       drawWorld(day);
       drawBoss(day);
       drawMobs(day);
+      drawBees(day);
+      drawStingers();
       drawParticles();
       drawPlayer();
       drawTarget();
@@ -1088,6 +1096,55 @@
         ctx.beginPath();
         ctx.arc(fsx, fsy, 4 + f.life * 3, 0, Math.PI * 2);
         ctx.fill();
+      }
+    }
+
+    function drawBees(day) {
+      for (const b of bees) {
+        const sx = b.x - camera.x, sy = b.y - camera.y;
+        if (sx < -50 || sx > canvas.width + 50 || sy < -50 || sy > canvas.height + 50) continue;
+        ctx.save();
+        ctx.translate(sx + b.w / 2, sy + b.h / 2);
+        // 身体
+        ctx.fillStyle = b.grounded ? '#8B6914' : '#FFD700';
+        ctx.beginPath();
+        ctx.ellipse(0, 0, b.w / 2, b.h / 2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        // 条纹
+        ctx.fillStyle = '#222';
+        for (let si = -2; si <= 2; si++) ctx.fillRect(-b.w / 2 + 2, si * 4 - 1, b.w - 4, 2);
+        // 眼睛
+        ctx.fillStyle = '#f00';
+        ctx.fillRect(-4, -3, 3, 3); ctx.fillRect(1, -3, 3, 3);
+        // 翅膀
+        const wingOff = Math.sin(Date.now() / 80) * 3;
+        ctx.fillStyle = 'rgba(200,220,255,0.6)';
+        ctx.fillRect(-b.w / 2 - 4, -b.h / 2 + wingOff, 5, 8);
+        ctx.fillRect(b.w / 2 - 1, -b.h / 2 + wingOff, 5, 8);
+        ctx.restore();
+        // 血条
+        if (b.hp < 10) {
+          ctx.fillStyle = '#333'; ctx.fillRect(sx, sy - 8, b.w, 4);
+          ctx.fillStyle = '#0f0'; ctx.fillRect(sx, sy - 8, b.w * (b.hp / 10), 4);
+        }
+      }
+    }
+
+    function drawStingers() {
+      for (const s of beeStingers) {
+        const sx = s.x - camera.x, sy = s.y - camera.y;
+        if (sx < -20 || sx > canvas.width + 20 || sy < -20 || sy > canvas.height + 20) continue;
+        ctx.save();
+        ctx.translate(sx, sy);
+        const angle = Math.atan2(s.vy, s.vx);
+        ctx.rotate(angle);
+        ctx.fillStyle = '#4a2';
+        ctx.beginPath();
+        ctx.moveTo(8, 0); ctx.lineTo(-4, -3); ctx.lineTo(-4, 3);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#f80';
+        ctx.fillRect(-4, -1.5, 6, 3);
+        ctx.restore();
       }
     }
 
