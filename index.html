@@ -280,10 +280,9 @@
     <div class="crosshair"></div>
     <section class="card inventory" id="inventory"></section>
     <section class="card help">
-      <p><b>操作</b> WASD移动，空格跳跃，Shift疾跑。</p>
-      <p>左键/长按挖掘，右键放置，1-8切换方块。</p>
-      <p>E徒手合成木板，Q合成工作台，T使用工作台合成，R重生，P保存，L读取。</p>
-      <p><b>合成</b> 原木→木板(E)→工作台(Q)→木棍/木镐/火把(T靠近工作台)</p>
+      <p><b>操作</b> WASD移动，空格跳跃，Shift疾跑。左键/长按挖掘，右键放置，1-9切换方块。</p>
+      <p>E徒手木板，Q合成工作台，T使用工作台合成，R重生，P保存，L读取。</p>
+      <p><b>合成</b> 原木→木板(E)→工作台(Q)→木棍/木镐/火把(T在附近)</p>
     </section>
     <div class="touch-controls">
       <div class="pad">
@@ -325,7 +324,7 @@
       apple: { emoji: '🍎', color: '#d84f37', solid: false, hardness: 0, name: '苹果' }
     };
 
-    const HOTBAR = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'plank', 'workbench', 'stick', 'apple'];
+    const HOTBAR = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'plank', 'workbench', 'wood_pickaxe', 'apple'];
     const inventory = { grass: 4, dirt: 8, stone: 4, wood: 0, leaves: 0, sand: 0, coal: 0, iron: 0, plank: 0, stick: 0, wood_pickaxe: 0, workbench: 0, torch: 3, apple: 64 };
     let selected = 0;
     let world = [];
