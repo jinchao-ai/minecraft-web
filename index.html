@@ -321,7 +321,7 @@
       apple: { emoji: '🍎', color: '#d84f37', solid: false, hardness: 0, name: '苹果' }
     };
 
-    const HOTBAR = ['grass', 'dirt', 'stone', 'wood', 'plank', 'sand', 'torch', 'apple'];
+    const HOTBAR = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'plank', 'apple'];
     const inventory = { grass: 4, dirt: 8, stone: 4, wood: 0, leaves: 0, sand: 0, coal: 0, iron: 0, plank: 0, torch: 3, apple: 64 };
     let selected = 0;
     let world = [];
@@ -786,11 +786,17 @@
       canvas.height = innerHeight;
     }
 
+    let autoSaveTimer = 0;
     function loop(now) {
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       update(dt);
       draw();
+      autoSaveTimer += dt;
+      if (autoSaveTimer >= 30) {
+        autoSaveTimer = 0;
+        localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time }));
+      }
       requestAnimationFrame(loop);
     }
 
