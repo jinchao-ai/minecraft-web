@@ -919,18 +919,12 @@
           if (boss.hp <= 0) { boss = null; showMessage('🏆 BOSS击杀！'); }
         }
       }
-      // Boss生成（地下y>30且从未生成过）
-      bossSpawnAccum += dt;
-      if (!boss && bossSpawnAccum >= 10) {
-        bossSpawnAccum = 0;
-        const px = Math.floor(player.x / TILE);
-        const py = Math.floor(player.y / TILE);
-        if (py > 30) {
-          const bx = Math.max(1, Math.min(WORLD_W - 2, px + Math.floor(Math.random() * 15) - 7));
-          const by = Math.max(31, Math.min(WORLD_H - 2, py + Math.floor(Math.random() * 10) - 5));
-          boss = { x: bx * TILE, y: by * TILE, w: 36, h: 40, vx: 0, vy: 0, hp: 300, fireAccum: 0, fireDir: 0, invincible: 0 };
-          showMessage('💀 BOSS出现！');
-        }
+      // Boss生成（立即出现，自己在地下随机活动）
+      if (!boss) {
+        const bx = Math.floor(1 + Math.random() * (WORLD_W - 2));
+        const by = Math.floor(Math.floor(WORLD_H * 0.5) + Math.random() * (WORLD_H - Math.floor(WORLD_H * 0.5) - 1));
+        boss = { x: bx * TILE, y: by * TILE, w: 36, h: 40, vx: 0, vy: 0, hp: 300, fireAccum: 0, fireDir: 0, invincible: 0, wanderTimer: 0, wanderTarget: { x: bx * TILE, y: by * TILE }, chasing: false };
+        showMessage('💀 BOSS出现！');
       }
       // Boss行为
       if (boss) {
@@ -938,25 +932,68 @@
         const dx = player.x - boss.x;
         const dy = player.y - boss.y;
         const dist = Math.hypot(dx, dy);
-        // 移向玩家
-        if (dist > 80) {
-          boss.vx += Math.sign(dx) * 200 * dt;
-          boss.vx *= 0.9;
+        const playerUnderground = Math.floor(player.y / TILE) > 30;
+        // 玩家在地下且距离<20格则追击，否则原地随机活动
+        if (playerUnderground && dist < TILE * 20) {
+          boss.chasing = true;
+          boss.wanderTimer = 3;
+        } else {
+          boss.chasing = false;
+        }
+        if (boss.chasing) {
+          // 追击玩家
+          if (dist > 80) {
+            boss.vx += Math.sign(dx) * 220 * dt;
+            boss.vx *= 0.88;
+            boss.x += boss.vx * dt;
+          }
+        } else {
+          // 原地随机活动（每1-3秒换个方向）
+          boss.wanderTimer -= dt;
+          if (boss.wanderTimer <= 0) {
+            boss.wanderTimer = 1 + Math.random() * 3;
+            const rx = Math.floor(1 + Math.random() * (WORLD_W - 2));
+            const ry = Math.floor(Math.floor(WORLD_H * 0.45) + Math.random() * (WORLD_H - Math.floor(WORLD_H * 0.45) - 1));
+            boss.wanderTarget = { x: rx * TILE, y: ry * TILE };
+          }
+          const wdx = boss.wanderTarget.x - boss.x;
+          const wdy = boss.wanderTarget.y - boss.y;
+          boss.vx += Math.sign(wdx) * 80 * dt;
+          boss.vy += Math.sign(wdy) * 80 * dt;
+          boss.vx *= 0.85;
+          boss.vy *= 0.85;
           boss.x += boss.vx * dt;
         }
         // 重力
         boss.vy += 600 * dt;
         boss.vy = Math.min(boss.vy, 400);
         boss.y += boss.vy * dt;
-        // 碰撞地面
+        // 四周碰撞
         const bmy1 = Math.floor(boss.y / TILE);
         const bmy2 = Math.floor((boss.y + boss.h) / TILE);
         const bmx1 = Math.floor((boss.x + 6) / TILE);
         const bmx2 = Math.floor((boss.x + boss.w - 6) / TILE);
-        if (bmy2 >= 0 && bmy2 < WORLD_H && bmx1 >= 0 && bmx1 < WORLD_W && world[bmy2][bmx1] !== 'air' && world[bmy2][bmx1] !== 'water' && world[bmy2][bmx1] !== 'poison_gas' && world[bmy2][bmx1] !== 'fire') {
-          boss.y = bmy2 * TILE - boss.h;
-          boss.vy = 0;
+        const ground = (by) => world[by] && world[by][bmx1] && !['air','water','poison_gas','fire'].includes(world[by][bmx1]);
+        const ceilBlk = (by) => world[by] && world[by][bmx1] && !['air','water','poison_gas','fire'].includes(world[by][bmx1]);
+        const leftBlk = (bx) => world[bmy2] && world[bmy2][bx] && !['air','water','poison_gas','fire'].includes(world[bmy2][bx]);
+        const rightBlk = (bx) => world[bmy2] && world[bmy2][bx] && !['air','water','poison_gas','fire'].includes(world[bmy2][bx]);
+        // 地面
+        if (bmy2 >= 0 && bmy2 < WORLD_H && bmx1 >= 0 && bmx1 < WORLD_W && ground(bmy2)) {
+          boss.y = bmy2 * TILE - boss.h; boss.vy = 0;
         }
+        // 天花板
+        if (bmy1 >= 0 && bmy1 < WORLD_H && bmx1 >= 0 && bmx1 < WORLD_W && ceilBlk(bmy1)) {
+          boss.y = (bmy1 + 1) * TILE; boss.vy = Math.max(0, boss.vy);
+        }
+        // 左墙
+        if (bmx1 >= 0 && bmx1 < WORLD_W && bmy2 >= 0 && bmy2 < WORLD_H && leftBlk(bmx1)) {
+          boss.x = (bmx1 + 1) * TILE - 6; boss.vx = 0;
+        }
+        // 右墙
+        if (bmx2 >= 0 && bmx2 < WORLD_W && bmy2 >= 0 && bmy2 < WORLD_H && rightBlk(bmx2)) {
+          boss.x = bmx2 * TILE - boss.w + 6; boss.vx = 0;
+        }
+        boss.x = Math.max(0, Math.min(WORLD_W * TILE - boss.w, boss.x));
         // 喷火（持续5秒，每0.25秒喷射一次，共20格）
         boss.fireAccum += dt;
         if (boss.fireAccum >= 2.5 && !boss.fireBreathing) {
