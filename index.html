@@ -873,6 +873,11 @@
     function loadGame() {
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) { showMessage('没有存档。'); return false; }
+      // 作废有毒气的旧存档，从新世界开始
+      localStorage.removeItem(SAVE_KEY);
+      generateWorld();
+      showMessage('旧存档已清除，正在生成新世界。');
+      return false;
       const data = JSON.parse(raw);
       world = data.world;
       Object.assign(inventory, data.inventory);
@@ -2074,8 +2079,14 @@ showMessage('已在出生点重生 ☠️');
     if (savedData) {
       try {
         const data = JSON.parse(savedData);
+        // ── 存档加载时过滤毒气 ──
         world = data.world;
-        const cleared = clearPoisonGas();
+        let cleared = 0;
+        for (let y = 0; y < WORLD_H; y++) {
+          for (let x = 0; x < WORLD_W; x++) {
+            if (world[y][x] === 'poison_gas') { world[y][x] = 'air'; cleared++; }
+          }
+        }
         if (cleared > 0) showMessage('已清理存档中毒气 ' + cleared + ' 块');
         Object.assign(inventory, data.inventory);
         Object.assign(player, data.player, { vx: 0, vy: 0 });
