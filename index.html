@@ -324,7 +324,7 @@
       apple: { emoji: '🍎', color: '#d84f37', solid: false, hardness: 0, name: '苹果' }
     };
 
-    const HOTBAR = ['grass', 'dirt', 'stone', 'wood', 'coal', 'iron', 'plank', 'workbench', 'wood_pickaxe', 'apple'];
+    const HOTBAR = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'plank', 'workbench', 'wood_pickaxe', 'apple'];
     const inventory = { grass: 4, dirt: 8, stone: 4, wood: 0, leaves: 0, sand: 0, coal: 0, iron: 0, plank: 0, stick: 0, wood_pickaxe: 0, workbench: 0, torch: 3, apple: 64 };
     let selected = 0;
     let world = [];
@@ -438,7 +438,10 @@
         inventory[type] = (inventory[type] || 0) + 1;
         if (type === 'leaves' && Math.random() < 0.34) inventory.apple++;
         burst(tx * TILE + TILE / 2, ty * TILE + TILE / 2, block.color);
-        showMessage(`获得 ${block.name}`);
+        let msg = `获得 ${block.name}`;
+        if (type === 'coal') msg = '获得 煤矿 ×' + (inventory.coal || 0);
+        if (type === 'iron') msg = '获得 铁矿 ×' + (inventory.iron || 0);
+        showMessage(msg);
         mineProgress = 0;
         mineTarget = null;
         return true;
