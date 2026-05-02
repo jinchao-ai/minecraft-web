@@ -256,8 +256,8 @@
       .brand p { font-size: 11px; }
       .stats { min-width: 178px; }
       .meter { grid-template-columns: 38px 1fr 26px; font-size: 11px; }
-      .inventory { bottom: 118px; gap: 4px; }
-      .slot { width: 43px; height: 43px; font-size: 20px; border-width: 2px; }
+      .inventory { bottom: 118px; gap: 4px; flex-wrap: wrap; max-width: 320px; justify-content: center; }
+      .slot { width: 43px; height: 43px; font-size: 20px; border-width: 2px; } @media(max-width:500px){ .inventory { max-width: 220px; } }
     }
   </style>
 </head>
@@ -335,8 +335,8 @@
       apple: { emoji: '🍎', color: '#d84f37', solid: false, hardness: 0, name: '苹果' }
     };
 
-    const HOTBAR = ['grass', 'dirt', 'stone', 'wood', 'coal', 'iron', 'sand', 'leaves', 'plank', 'stick', 'workbench', 'wood_pickaxe', 'apple'];
-    const inventory = { grass: 4, dirt: 8, stone: 4, wood: 0, leaves: 0, sand: 0, coal: 0, iron: 0, copper: 0, gold: 0, diamond: 0, emerald: 0, plank: 0, stick: 0, wood_pickaxe: 0, workbench: 0, torch: 3, apple: 64 };
+    const HOTBAR = ['grass','dirt','stone','wood','coal','iron','copper','gold','diamond','emerald','sand','leaves','plank','stick','torch','workbench','wood_pickaxe','apple'];
+    const inventory = { grass: 4, dirt: 8, stone: 4, wood: 0, leaves: 0, sand: 0, coal: 0, iron: 0, copper: 0, gold: 0, diamond: 0, emerald: 0, plank: 0, stick: 0, torch: 5, workbench: 0, wood_pickaxe: 0, apple: 64 };
     let selected = 0;
     let world = [];
     let particles = [];
@@ -433,7 +433,7 @@
         inventory.stick = 0;
         inventory.wood_pickaxe = 0;
         inventory.workbench = 0;
-        inventory.torch = Math.floor(Math.random() * 3) + 1;
+        inventory.torch = Math.floor(Math.random() * 4) + 3;
         inventory.apple = Math.floor(Math.random() * 32) + 64;
       }
       resetPlayer(false);
@@ -1406,6 +1406,8 @@
       for (const slot of el.querySelectorAll('.slot')) {
         slot.addEventListener('pointerdown', () => selected = Number(slot.dataset.slot));
       }
+      // 点击空格收起背包
+      el.onclick = e => { if (e.target === el) { el.style.display = 'none'; } };
     }
 
     function showMessage(text) {
