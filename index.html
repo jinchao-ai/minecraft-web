@@ -369,6 +369,7 @@
     let bees = [];
     let beeStingers = [];
     let beeSpawnAccum = 0;
+    let dayKilledMobs = false; // 白天已清怪标志，夜晚重置
 
     const player = {
       x: spawn.x, y: spawn.y, w: 21, h: 29, vx: 0, vy: 0,
@@ -920,6 +921,14 @@
 
     function update(dt) {
       time = (time + dt / 240) % 1;
+      // ── 白天杀死所有怪物（仅触发一次） ──
+      if (time > 0.28 && time < 0.72 && !dayKilledMobs) {
+        dayKilledMobs = true;
+        const killed = mobs.length + bees.length;
+        if (killed > 0) showMessage('☀️ 阳光灼烧！' + killed + '只怪物死亡！');
+        mobs = []; bees = [];
+      }
+      if (time > 0.72) dayKilledMobs = false; // 夜晚重置标志
       // ── 30分钟自动锁定检测 ──
       if (gameState === 'playing' && !isResting) {
         const elapsed = Date.now() - parseInt(localStorage.getItem(gameStartKey) || Date.now().toString());
