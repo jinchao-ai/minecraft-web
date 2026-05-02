@@ -362,6 +362,7 @@
     let mobSpawnAccum = 0;
     let mobDmgAccum = 0;
     let boss = null;
+    let bossWaking = false;
     let bossFireballs = [];
     let fireParticles = [];
     let bossSpawnAccum = 0;
@@ -1146,6 +1147,7 @@
       ctx.save();
       ctx.translate(-Math.floor(camera.x), -Math.floor(camera.y));
       drawWorld(day);
+      drawBoss(day);
       drawMobs(day);
       drawBees(day);
       drawStingers();
@@ -1283,7 +1285,48 @@
       }
     }
 
-        function drawBoss(day) { } // Boss已移除
+    function drawBoss(day) {
+      if (!boss) return;
+      const sx = boss.x - camera.x, sy = boss.y - camera.y;
+      if (sx < -60 || sx > canvas.width + 60 || sy < -60 || sy > canvas.height + 60) return;
+      ctx.save();
+      ctx.translate(sx + boss.w / 2, sy + boss.h / 2);
+      if (boss.facing < 0) ctx.scale(-1, 1);
+      const bodyColor = boss.wakeFlash || (!boss.awake ? '#4a0000' : '#8b0000');
+      ctx.fillStyle = bodyColor;
+      ctx.fillRect(-boss.w/2, -boss.h/2 + 10, boss.w, boss.h - 10);
+      ctx.fillStyle = !boss.awake ? '#3a0000' : '#cc1111';
+      ctx.fillRect(-boss.w/2 + 4, -boss.h/2, boss.w - 8, 20);
+      ctx.fillStyle = '#222';
+      ctx.fillRect(-boss.w/2 + 2, -boss.h/2 - 10, 7, 12);
+      ctx.fillRect(boss.w/2 - 9, -boss.h/2 - 10, 7, 12);
+      if (boss.awake) {
+        const armSwing = Math.sin(Date.now() / 200) * 0.4;
+        ctx.save();
+        ctx.translate(boss.w/2 - 4, -boss.h/2 + 12);
+        ctx.rotate(-0.8 + armSwing);
+        ctx.fillStyle = '#aaa'; ctx.fillRect(0, -2, 20, 4);
+        ctx.fillStyle = '#666'; ctx.fillRect(0, -3, 4, 6);
+        ctx.restore();
+      }
+      ctx.fillStyle = boss.awake ? '#ffff00' : '#888';
+      ctx.fillRect(-7, -boss.h/2 + 7, 5, 5);
+      ctx.fillRect(2, -boss.h/2 + 7, 5, 5);
+      ctx.restore();
+      ctx.fillStyle = '#333'; ctx.fillRect(sx - 2, sy - 22, boss.w + 4, 8);
+      ctx.fillStyle = boss.awake ? '#f00' : '#a00';
+      ctx.fillRect(sx, sy - 20, boss.w * (boss.hp / boss.maxHp), 4);
+      ctx.fillStyle = '#fff'; ctx.font = '11px sans-serif';
+      if (!boss.awake) ctx.fillText('💤 ' + Math.ceil(3 - boss.awakeTimer) + 's', sx, sy - 26);
+      else ctx.fillText('👹', sx, sy - 26);
+      for (const fb of bossFireballs) {
+        const fsx = fb.x - camera.x, fsy = fb.y - camera.y;
+        ctx.fillStyle = '#f80';
+        ctx.beginPath(); ctx.arc(fsx, fsy, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ff0';
+        ctx.beginPath(); ctx.arc(fsx, fsy, 3, 0, Math.PI * 2); ctx.fill();
+      }
+    }
 
     function drawBees(day) {
       for (const b of bees) {
@@ -1656,7 +1699,15 @@
           boss.hp -= dmg;
           boss.invincible = 0.3;
           showMessage('🔥 攻击BOSS！-' + dmg + ' HP:' + boss.hp + '/300');
-          hit = true;
+          if (boss.hp <= 0) {
+            spawnParticles(boss.x + boss.w/2, boss.y + boss.h/2, '#f00', 20);
+            spawnParticles(boss.x + boss.w/2, boss.y + boss.h/2, '#ff0', 15);
+            inventory.diamond = (inventory.diamond||0) + 3;
+            inventory.gold = (inventory.gold||0) + 5;
+            inventory.emerald = (inventory.emerald||0) + 2;
+            showMessage('🏆 BOSS击杀！掉落钻石x3 金锭x5 绿宝石x2！');
+            boss = null; hit = true;
+          } else { hit = true; }
         }
         // 攻击普通怪物
         if (!hit) {
