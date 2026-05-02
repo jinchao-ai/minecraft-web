@@ -932,35 +932,63 @@
           boss.y = bmy2 * TILE - boss.h;
           boss.vy = 0;
         }
-        // 喷火
+        // 喷火（持续5秒，每0.25秒喷射一次，共20格）
         boss.fireAccum += dt;
-        if (boss.fireAccum >= 2.5) {
-          boss.fireAccum = 0;
+        if (boss.fireAccum >= 2.5 && !boss.fireBreathing) {
+          boss.fireBreathing = true;
+          boss.fireTimer = 5;
           boss.fireDir = dx > 0 ? 1 : -1;
-          const bx = Math.floor((boss.x + boss.w / 2) / TILE);
-          const by = Math.floor((boss.y + boss.h / 2) / TILE);
-          const dir = boss.fireDir;
-          // 沿水平方向喷射火焰，最多20格，融化遇到的方块
-          for (let i = 1; i <= 20; i++) {
-            const fx = bx + dir * i;
-            const fy = by + Math.floor(Math.random() * 3) - 1; // 上下轻微飘动
-            if (fx < 0 || fx >= WORLD_W || fy < 0 || fy >= WORLD_H) break;
-            const bt = world[fy][fx];
-            if (bt !== 'air' && bt !== 'fire' && bt !== 'poison_gas' && bt !== 'water') {
-              // 融化方块（两侧各一格）
-              world[fy][fx] = 'air';
-              if (fy + 1 < WORLD_H && world[fy + 1][fx] !== 'air' && world[fy + 1][fx] !== 'fire') {
-                if (Math.random() < 0.5) world[fy + 1][fx] = 'air';
+          showMessage('🔥 BOSS开始喷火！');
+        }
+        if (boss.fireBreathing) {
+          boss.fireTimer -= dt;
+          if (boss.fireTimer <= 0) {
+            boss.fireBreathing = false;
+            boss.fireAccum = 0;
+          } else {
+            const bx = Math.floor((boss.x + boss.w / 2) / TILE);
+            const by = Math.floor((boss.y + boss.h / 2) / TILE);
+            const dir = boss.fireDir;
+            // 每0.25秒沿水平方向喷射一格火焰
+            if (Math.floor(boss.fireTimer * 4) !== Math.floor((boss.fireTimer + dt) * 4)) {
+              for (let i = 1; i <= 20; i++) {
+                const fx = bx + dir * i;
+                const fy = by + Math.floor(Math.random() * 3) - 1;
+                if (fx < 0 || fx >= WORLD_W || fy < 0 || fy >= WORLD_H) break;
+                const bt = world[fy][fx];
+                if (bt === 'poison_gas') {
+                  // 毒气爆炸：周围3格全部清除
+                  world[fy][fx] = 'air';
+                  for (let dy = -3; dy <= 3; dy++) {
+                    for (let dx2 = -3; dx2 <= 3; dx2++) {
+                      if (dx2 * dx2 + dy * dy > 9) continue;
+                      const ex = fx + dx2, ey = fy + dy;
+                      if (ex >= 0 && ex < WORLD_W && ey >= 0 && ey < WORLD_H && world[ey][ex] !== 'air') {
+                        world[ey][ex] = 'air';
+                      }
+                    }
+                  }
+                  // 爆炸粒子
+                  for (let k = 0; k < 20; k++) {
+                    const angle = Math.random() * Math.PI * 2;
+                    const spd = 50 + Math.random() * 150;
+                    fireParticles.push({ x: fx * TILE + TILE / 2, y: fy * TILE + TILE / 2, life: 0.8, vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd - 50, color: '#88ff44' });
+                  }
+                  showMessage('💥 火焰引爆毒气！');
+                  break;
+                }
+                if (bt !== 'air' && bt !== 'fire' && bt !== 'water') {
+                  world[fy][fx] = 'air';
+                  break;
+                }
               }
-              if (fy - 1 >= 0 && world[fy - 1][fx] !== 'air' && world[fy - 1][fx] !== 'fire') {
-                if (Math.random() < 0.5) world[fy - 1][fx] = 'air';
+              // 火焰粒子
+              for (let i = 1; i <= 20; i++) {
+                const px = (bx + dir * i) * TILE + TILE / 2;
+                const py = by * TILE + TILE / 2;
+                fireParticles.push({ x: px, y: py, life: 0.6 + Math.random() * 0.4, vx: dir * (100 + Math.random() * 50) + (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 80, color: '#ff6600' });
               }
-              break;
             }
-          }
-          // 添加火焰轨迹粒子
-          for (let i = 1; i <= 12; i++) {
-            fireParticles.push({ x: (bx + dir * i) * TILE + TILE / 2, y: by * TILE + TILE / 2, life: 1.5, vx: dir * 80 + (Math.random() - 0.5) * 30, vy: (Math.random() - 0.5) * 60 });
           }
         }
         // Boss接触玩家扣血
@@ -1162,6 +1190,14 @@
       }
     }
 
+    function hexToRgba(hex, alpha) {
+      const h = hex.replace('#', '');
+      const r = parseInt(h.slice(0, 2), 16);
+      const g = parseInt(h.slice(2, 4), 16);
+      const b = parseInt(h.slice(4, 6), 16);
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
+
     function drawBoss(day) {
       if (!boss) return;
       const sx = boss.x - camera.x;
@@ -1193,7 +1229,11 @@
       for (const f of fireParticles) {
         const fsx = f.x - camera.x;
         const fsy = f.y - camera.y;
-        ctx.fillStyle = `rgba(255,${100 + Math.random() * 100},0,${f.life})`;
+        if (f.color) {
+          ctx.fillStyle = f.color.startsWith('#') ? hexToRgba(f.color, f.life) : f.color;
+        } else {
+          ctx.fillStyle = `rgba(255,${Math.floor(100 + Math.random() * 100)},0,${f.life})`;
+        }
         ctx.beginPath();
         ctx.arc(fsx, fsy, 4 + f.life * 3, 0, Math.PI * 2);
         ctx.fill();
