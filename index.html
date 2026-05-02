@@ -361,7 +361,7 @@
       return a + (b - a) * t;
     }
 
-    function generateWorld() {
+    function generateWorld(fresh = false) {
       world = Array.from({ length: WORLD_H }, () => Array(WORLD_W).fill('air'));
       for (let x = 0; x < WORLD_W; x++) {
         const hill = smoothNoise(x * 0.045) * 9 + smoothNoise(x * 0.12) * 4;
@@ -382,9 +382,28 @@
         }
       }
       spawn = { x: 9 * TILE, y: 20 * TILE };
+      // 随机出生点（地图随机位置）
+      const baseX = Math.floor(20 + Math.random() * (WORLD_W - 50));
+      const surfaceY = world.findIndex((row) => row[baseX] !== 'air');
+      if (surfaceY > 0) spawn = { x: baseX * TILE, y: (surfaceY - 2) * TILE };
+      if (fresh) {
+        // 随机初始物品
+        inventory.grass = Math.floor(Math.random() * 6) + 4;
+        inventory.dirt = Math.floor(Math.random() * 10) + 6;
+        inventory.stone = Math.floor(Math.random() * 6) + 2;
+        inventory.wood = Math.floor(Math.random() * 2);
+        inventory.leaves = 0;
+        inventory.sand = Math.floor(Math.random() * 4);
+        inventory.plank = Math.floor(Math.random() * 2);
+        inventory.stick = 0;
+        inventory.wood_pickaxe = 0;
+        inventory.workbench = 0;
+        inventory.torch = Math.floor(Math.random() * 3) + 1;
+        inventory.apple = Math.floor(Math.random() * 32) + 64;
+      }
       resetPlayer(false);
       clouds = Array.from({ length: 12 }, (_, i) => ({ x: i * 520 + noise(i) * 180, y: 50 + noise(i + 8) * 90, s: 0.8 + noise(i + 20) * 0.8 }));
-      showMessage('新世界已生成，先砍树再挖矿。');
+      showMessage(fresh ? '🌍 新世界已生成，随机出生点！' : '世界已重置。');
     }
 
     function plantTree(x, y) {
@@ -886,7 +905,23 @@
     document.getElementById('touchPlace').addEventListener('pointerdown', e => { e.preventDefault(); mouse.x = innerWidth / 2; mouse.y = innerHeight / 2; const t = targetFromPointer(); placeBlock(t.x, t.y); });
 
     resize();
-    generateWorld();
+    const savedData = localStorage.getItem(SAVE_KEY);
+    if (savedData) {
+      try {
+        const data = JSON.parse(savedData);
+        world = data.world;
+        Object.assign(inventory, data.inventory);
+        Object.assign(player, data.player, { vx: 0, vy: 0 });
+        time = data.time || 0.18;
+        camera.x = player.x - innerWidth / 2;
+        camera.y = player.y - innerHeight / 2;
+        showMessage('存档已读取。');
+      } catch (e) {
+        generateWorld(true);
+      }
+    } else {
+      generateWorld(true);
+    }
     renderInventory();
     requestAnimationFrame(loop);
   </script>
