@@ -885,22 +885,31 @@
     window.addEventListener('resize', resize);
     window.addEventListener('keydown', e => {
       keys.add(e.code);
-      if (e.code === 'KeyQ') craftWorkbench();
+      // 数字键选择快捷栏（0=第10格）
+      if (e.code === 'Digit1') selected = 0;
+      else if (e.code === 'Digit2') selected = 1;
+      else if (e.code === 'Digit3') selected = 2;
+      else if (e.code === 'Digit4') selected = 3;
+      else if (e.code === 'Digit5') selected = 4;
+      else if (e.code === 'Digit6') selected = 5;
+      else if (e.code === 'Digit7') selected = 6;
+      else if (e.code === 'Digit8') selected = 7;
+      else if (e.code === 'Digit9') selected = 8;
+      else if (e.code === 'Digit0') selected = 9;
+      else if (e.key >= '0' && e.key <= '9') selected = Number(e.key) % 10;
+      // 合成快捷键
+      if (e.code === 'KeyQ') { craftWorkbench(); renderInventory(); }
       if (e.code === 'KeyE') {
-        if (HOTBAR[selected] === 'workbench') placeWorkbench();
-        else if (getNearbyWorkbench() && (inventory.plank >= 2 || (inventory.plank >= 3 && inventory.stick >= 2) || (inventory.coal >= 1 && inventory.stick >= 1))) craftAtWorkbench();
+        if (getNearbyWorkbench()) craftAtWorkbench();
         else craftPlanks();
+        renderInventory();
       }
-      if (e.code === 'KeyT') craftAtWorkbench();
-      if (e.code === 'KeyY') {
-        const idx = HOTBAR.indexOf('workbench');
-        if (idx >= 0) selected = idx;
-      }
-      if (e.code === 'KeyF') eatApple();
+      if (e.code === 'KeyT') { craftAtWorkbench(); renderInventory(); }
+      if (e.code === 'KeyY') { selected = HOTBAR.indexOf('workbench'); renderInventory(); }
+      if (e.code === 'KeyF') { eatApple(); renderInventory(); }
       if (e.code === 'KeyR') resetPlayer(true);
-      if (e.code === 'KeyP') saveGame();
-      if (e.code === 'KeyL') loadGame();
-      if (/Digit[0-9]/.test(e.code)) selected = Number(e.code.slice(5)) % 10;
+      if (e.code === 'KeyP') { saveGame(); renderInventory(); }
+      if (e.code === 'KeyL') { loadGame(); renderInventory(); }
     });
     window.addEventListener('keyup', e => keys.delete(e.code));
     canvas.addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
