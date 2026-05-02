@@ -357,7 +357,8 @@
 
     const player = {
       x: spawn.x, y: spawn.y, w: 21, h: 29, vx: 0, vy: 0,
-      facing: 1, grounded: false, health: 100, hunger: 100, stamina: 100
+      facing: 1, grounded: false, health: 100, hunger: 100, stamina: 100,
+      walkCycle: 0, armSwing: 0, breathCycle: 0
     };
 
     function noise(n) {
@@ -1194,17 +1195,108 @@
 
     function drawPlayer() {
       const x = player.x, y = player.y;
+      const f = player.facing;  // 1=右 -1=左
+      const moving = Math.abs(player.vx) > 0.5 && player.grounded;
+      const jumping = !player.grounded && player.vy < -50;
+      const falling = !player.grounded && player.vy > 50;
+      const wc = Math.sin(player.walkCycle) * (moving ? 1 : 0);
+      const breath = Math.sin(player.breathCycle) * 0.6;
+      const swing = player.armSwing;
+      ctx.save();
+      ctx.translate(Math.floor(x + 10.5), Math.floor(y + 14));
+      if (f < 0) ctx.scale(-1, 1);
+      ctx.translate(-10.5, -14);
+
+      // 阴影
+      ctx.fillStyle = 'rgba(0,0,0,0.18)';
+      ctx.beginPath();
+      ctx.ellipse(10.5, 29, 8, 2.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // ── 腿 ──
+      const legY = 24, legW = 6, legH = 8;
+      if (jumping) {
+        // 跳跃：双腿收起
+        ctx.fillStyle = '#2a4e9f';
+        ctx.fillRect(4, legY + 1, legW, legH - 2);
+        ctx.fillRect(11, legY + 1, legW, legH - 2);
+      } else if (falling) {
+        // 下落：双腿张开
+        ctx.fillStyle = '#2a4e9f';
+        ctx.fillRect(2, legY + 2, legW, legH);
+        ctx.fillRect(13, legY + 2, legW, legH);
+      } else if (moving) {
+        // 走路：左右交替
+        const lL = Math.sin(player.walkCycle) * 3;
+        const rL = -Math.sin(player.walkCycle) * 3;
+        ctx.fillStyle = '#2a4e9f';
+        ctx.fillRect(4 + lL, legY, legW, legH);
+        ctx.fillRect(11 + rL, legY, legW, legH);
+      } else {
+        // 站立：轻微呼吸
+        ctx.fillStyle = '#2a4e9f';
+        ctx.fillRect(4, legY - breath * 0.3, legW, legH);
+        ctx.fillRect(11, legY - breath * 0.3, legW, legH);
+      }
+
+      // ── 身体 ──
       ctx.fillStyle = '#2f7dbe';
-      ctx.fillRect(x + 3, y + 12, 15, 17);
+      const bodyY = 12 + breath * 0.4;
+      ctx.fillRect(3, bodyY, 15, 13);
+
+      // T恤图案（随呼吸微动）
+      ctx.fillStyle = '#3a90cc';
+      ctx.fillRect(7, bodyY + 3, 7, 4);
+
+      // ── 手臂 ──
+      const armY = bodyY + 2;
+      if (swing !== 0) {
+        // 挖掘中：手臂上下挥动
+        ctx.save();
+        ctx.translate(0, 6);
+        ctx.rotate(swing);
+        ctx.fillStyle = '#c98856';
+        ctx.fillRect(-1, -1, 5, 10); // 左臂
+        ctx.restore();
+        ctx.save();
+        ctx.translate(18, 6);
+        ctx.rotate(-swing);
+        ctx.fillStyle = '#c98856';
+        ctx.fillRect(-4, -1, 5, 10); // 右臂（挥向目标）
+        ctx.restore();
+      } else if (moving) {
+        // 走路：手臂摆动（与腿反向）
+        const aSwing = Math.sin(player.walkCycle) * 0.4;
+        ctx.fillStyle = '#c98856';
+        ctx.save(); ctx.translate(0, armY); ctx.rotate(aSwing); ctx.fillRect(-1, -1, 5, 9); ctx.restore();
+        ctx.save(); ctx.translate(18, armY); ctx.rotate(-aSwing); ctx.fillRect(-4, -1, 5, 9); ctx.restore();
+      } else {
+        // 站立：手臂自然下垂轻微摆动
+        ctx.fillStyle = '#c98856';
+        ctx.fillRect(0, armY + breath * 0.2, 5, 9);
+        ctx.fillRect(16, armY + breath * 0.2, 5, 9);
+      }
+
+      // ── 头 ──
       ctx.fillStyle = '#c98856';
-      ctx.fillRect(x + 2, y + 2, 17, 13);
-      ctx.fillStyle = '#2a4e9f';
-      ctx.fillRect(x + 3, y + 24, 6, 9);
-      ctx.fillRect(x + 12, y + 24, 6, 9);
+      ctx.fillRect(2, 2, 17, 13);
+      // 头发
+      ctx.fillStyle = '#3a2010';
+      ctx.fillRect(2, 1, 17, 5);
+      // 眼睛（朝facing方向）
       ctx.fillStyle = '#2b1a11';
-      ctx.fillRect(x + (player.facing > 0 ? 13 : 4), y + 7, 3, 3);
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-      ctx.strokeRect(x + 1.5, y + 1.5, 18, 31);
+      ctx.fillRect(13, 7, 3, 3);
+      // 嘴巴
+      ctx.fillStyle = '#b07050';
+      ctx.fillRect(12, 11, 4, 2);
+
+      // ── 轮廓 ──
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(2, 2, 17, 13);
+      ctx.strokeRect(3, bodyY, 15, 13);
+
+      ctx.restore();
     }
 
     function drawParticles() {
