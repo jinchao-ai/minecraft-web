@@ -396,13 +396,20 @@
 
     // 清空所有毒气
     function clearPoisonGas() {
+      if (typeof world === 'undefined' || !world.length) return 0;
       let count = 0;
       for (let y = 0; y < WORLD_H; y++)
         for (let x = 0; x < WORLD_W; x++)
           if (world[y][x] === 'poison_gas') { world[y][x] = 'air'; count++; }
       return count;
     }
-    clearPoisonGas(); // 首次加载时清空
+    // generateWorld后立即清空
+    const _origGen = generateWorld;
+    generateWorld = function(fresh) {
+      _origGen.apply(this, arguments);
+      const cleared = clearPoisonGas();
+      if (cleared > 0) showMessage('已清理毒气 ' + cleared + ' 块');
+    };
 
     function generateWorld(fresh = false) {
       world = Array.from({ length: WORLD_H }, () => Array(WORLD_W).fill('air'));
