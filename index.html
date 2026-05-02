@@ -325,7 +325,7 @@
       apple: { emoji: '🍎', color: '#d84f37', solid: false, hardness: 0, name: '苹果' }
     };
 
-    const HOTBAR = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'plank', 'stick', 'wood_pickaxe', 'apple'];
+    const HOTBAR = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'plank', 'workbench', 'stick', 'apple'];
     const inventory = { grass: 4, dirt: 8, stone: 4, wood: 0, leaves: 0, sand: 0, coal: 0, iron: 0, plank: 0, stick: 0, wood_pickaxe: 0, workbench: 0, torch: 3, apple: 64 };
     let selected = 0;
     let world = [];
@@ -885,7 +885,6 @@
     window.addEventListener('resize', resize);
     window.addEventListener('keydown', e => {
       keys.add(e.code);
-      if (/Digit[1-8]/.test(e.code)) selected = Number(e.code.slice(5)) - 1;
       if (e.code === 'KeyQ') craftWorkbench();
       if (e.code === 'KeyE') {
         if (HOTBAR[selected] === 'workbench') placeWorkbench();
@@ -893,10 +892,15 @@
         else craftPlanks();
       }
       if (e.code === 'KeyT') craftAtWorkbench();
+      if (e.code === 'KeyY') {
+        const idx = HOTBAR.indexOf('workbench');
+        if (idx >= 0) selected = idx;
+      }
       if (e.code === 'KeyF') eatApple();
       if (e.code === 'KeyR') resetPlayer(true);
       if (e.code === 'KeyP') saveGame();
       if (e.code === 'KeyL') loadGame();
+      if (/Digit[0-9]/.test(e.code)) selected = Number(e.code.slice(5)) % 10;
     });
     window.addEventListener('keyup', e => keys.delete(e.code));
     canvas.addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
