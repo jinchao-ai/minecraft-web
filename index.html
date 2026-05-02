@@ -797,6 +797,15 @@
       player.health = full ? 100 : player.health;
       player.hunger = full ? 100 : player.hunger;
       player.stamina = 100;
+      player.sleepTimer = 0;
+      // 清空所有毒气
+      if (full) {
+        for (let y = 0; y < WORLD_H; y++) {
+          for (let x = 0; x < WORLD_W; x++) {
+            if (world[y][x] === 'poison_gas') world[y][x] = 'air';
+          }
+        }
+      }
       showMessage('已在出生点重生 ☠️ 注意：地下深层有紫色毒气！');
     }
 
