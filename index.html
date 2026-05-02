@@ -763,13 +763,74 @@
       return true;
     }
 
+    function trySleep() {
+      const pbx = Math.floor(player.x / TILE), pby = Math.floor(player.y / TILE);
+      for (let dy = -1; dy <= 0; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          if (getBlock(pbx + dx, pby + dy) === 'bed') {
+            if (time > 0.25 && time < 0.85) {
+              player.sleepTimer = (0.85 - time) * 30;
+              showMessage('💤 正在睡觉...');
+              return;
+            } else {
+              showMessage('现在是白天，不需要睡觉');
+              return;
+            }
+          }
+        }
+      }
+      showMessage('附近没有床（需要站在床上方1格内）');
+    }
+    function tryCook() {
+      const px3 = Math.floor(player.x / TILE), py3 = Math.floor(player.y / TILE);
+      let nearFurnace = false;
+      for (let dy = -2; dy <= 2; dy++) {
+        for (let dx = -2; dx <= 2; dx++) {
+          if (getBlock(px3 + dx, py3 + dy) === 'furnace') { nearFurnace = true; break; }
+        }
+      }
+      if (!nearFurnace) { showMessage('附近没有熔炉（站在熔炉2格内）'); return; }
+      if ((inventory.bat_meat || 0) <= 0) { showMessage('背包里没有生肉可烤'); return; }
+      if ((inventory.coal || 0) <= 0 && (inventory.wood || 0) <= 0 && (inventory.plank || 0) <= 0) { showMessage('需要燃料（煤矿/木板）来烤肉'); return; }
+      if ((inventory.coal || 0) > 0) inventory.coal--;
+      else if ((inventory.plank || 0) > 0) inventory.plank--;
+      else inventory.wood--;
+      inventory.bat_meat--;
+      inventory.cooked_meat = (inventory.cooked_meat || 0) + 1;
+      showMessage('🍖 生肉烤成熟肉！+1熟肉（+8HP）');
+    }
+
     function eatApple() {
-      if (inventory.apple <= 0) return false;
-      inventory.apple--;
-      player.hunger = Math.min(100, player.hunger + 24);
-      player.health = Math.min(100, player.health + 8);
-      showMessage('苹果恢复饥饿和生命。');
-      return true;
+      // 优先吃熟肉（效果最好）
+      if ((inventory.cooked_meat || 0) > 0 && player.health < 100) {
+        inventory.cooked_meat--;
+        player.health = Math.min(100, player.health + 8);
+        player.hunger = Math.min(100, player.hunger + 20);
+        showMessage('🍖 熟肉 HP+8 饱腹+20');
+        return;
+      }
+      // 其次苹果
+      if ((inventory.apple || 0) > 0 && player.health < 100) {
+        inventory.apple--;
+        player.health = Math.min(100, player.health + 10);
+        player.hunger = Math.min(100, player.hunger + 15);
+        showMessage('🍎 苹果 HP+10 饱腹+15');
+        return;
+      }
+      // 最后生肉（有中毒风险）
+      if ((inventory.bat_meat || 0) > 0 && player.health < 100) {
+        inventory.bat_meat--;
+        player.health = Math.min(100, player.health + 3);
+        player.hunger = Math.min(100, player.hunger + 8);
+        if (Math.random() < 0.15) {
+          player.health = Math.max(0, player.health - 3);
+          showMessage('😷 生肉中毒！HP-3 但饱腹+8');
+        } else {
+          showMessage('🥩 生肉 HP+3 饱腹+8（烤熟更好）');
+        }
+        return;
+      }
+      showMessage('没有可吃的食物');
     }
 
     function saveGame() {
@@ -859,6 +920,87 @@
 
     function update(dt) {
       time = (time + dt / 240) % 1;
+      // ── 睡觉跳过时间 ──
+      if (player.sleepTimer > 0) {
+        player.sleepTimer -= dt;
+        time = (time + dt * 0.08) % 1;
+        if (time > 0.28 && time < 0.35) {
+          time = 0.28; player.sleepTimer = 0;
+          player.health = Math.min(100, player.health + 5);
+          showMessage('☀️ 天亮了！HP +5');
+        }
+        return;
+      }
+      // ── BOSS觉醒检测 ──
+      const playerDepth = Math.floor(player.y / TILE);
+      if (!boss && playerDepth >= WORLD_H - 15) {
+        boss = { x: player.x + (Math.random()<0.5?-1:1)*200, y: player.y + TILE,
+          w:28, h:38, hp:300, maxHp:300, vx:0, vy:0,
+          awake:false, awakeTimer:0, atkTimer:0, attackCooldown:0,
+          invincible:0, wakeFlash:null, facing:1 };
+        showMessage('⚠️ 地下深处传来沉重的脚步声...');
+      }
+      // ── BOSS行为 ──
+      if (boss) {
+        boss.invincible = Math.max(0, boss.invincible - dt);
+        boss.atkTimer = Math.max(0, boss.atkTimer - dt);
+        boss.attackCooldown = Math.max(0, boss.attackCooldown - dt);
+        const bdx = player.x - boss.x, bdy = player.y - boss.y;
+        const bdist = Math.sqrt(bdx*bdx + bdy*bdy);
+        boss.facing = bdx >= 0 ? 1 : -1;
+        if (!boss.awake) {
+          boss.awakeTimer += dt;
+          boss.wakeFlash = Math.sin(Date.now()/150)>0 ? '#f00' : '#800';
+          if (boss.awakeTimer >= 3) { boss.awake = true; boss.wakeFlash = null; showMessage('👹 BOSS苏醒了！正在追来！'); }
+        } else {
+          const bspd = 65;
+          if (bdist > 28) {
+            boss.vx += (bdx/bdist) * bspd * dt * 4;
+            boss.vy += (bdy/bdist) * bspd * dt * 4;
+          }
+          boss.vx *= 0.88; boss.vy *= 0.88;
+          boss.x += boss.vx * dt; boss.y += boss.vy * dt;
+          // 重力
+          if (!isSolidAtPixel(boss.x+boss.w/2, boss.y+boss.h+2)) boss.y += 80*dt;
+          // 左右碰撞
+          if (boss.vx < -0.5 && !isSolidAtPixel(boss.x-2, boss.y+boss.h/2)) boss.x += boss.vx*dt;
+          if (boss.vx >  0.5 && !isSolidAtPixel(boss.x+boss.w+2, boss.y+boss.h/2)) boss.x += boss.vx*dt;
+          // 近身攻击
+          if (bdist < 36 && boss.attackCooldown <= 0) {
+            player.health = Math.max(0, player.health - 15);
+            boss.attackCooldown = 1.2;
+            spawnParticles(player.x, player.y, '#f44', 5);
+            showMessage('💥 BOSS猛击！-15HP');
+          }
+          // 火球
+          if (boss.atkTimer <= 0 && bdist > 50) {
+            bossFireballs.push({ x:boss.x+boss.w/2, y:boss.y+boss.h/2, vx:(bdx/bdist)*120, vy:(bdy/bdist)*120, life:4 });
+            boss.atkTimer = 3;
+          }
+        }
+        // 火球更新
+        for (let fi = bossFireballs.length-1; fi>=0; fi--) {
+          const fb = bossFireballs[fi];
+          fb.x += fb.vx*dt; fb.y += fb.vy*dt; fb.life -= dt;
+          const fbtx=Math.floor(fb.x/TILE), fbty=Math.floor(fb.y/TILE);
+          if (fb.life<=0 || getBlock(fbtx,fbty)!=='air') { spawnParticles(fb.x,fb.y,'#f80',6); bossFireballs.splice(fi,1); continue; }
+          if (Math.abs(fb.x-player.x)<18 && Math.abs(fb.y-player.y)<18) {
+            player.health = Math.max(0, player.health-8);
+            spawnParticles(player.x, player.y, '#f80', 4);
+            bossFireballs.splice(fi,1);
+          }
+        }
+        // 死亡
+        if (boss.hp <= 0) {
+          spawnParticles(boss.x+boss.w/2, boss.y+boss.h/2, '#f00', 20);
+          spawnParticles(boss.x+boss.w/2, boss.y+boss.h/2, '#ff0', 15);
+          inventory.diamond = (inventory.diamond||0)+3;
+          inventory.gold = (inventory.gold||0)+5;
+          inventory.emerald = (inventory.emerald||0)+2;
+          showMessage('🏆 BOSS击杀！掉落钻石x3 金锭x5 绿宝石x2！');
+          boss = null;
+        }
+      }
       const sprinting = keys.has('ShiftLeft') && player.stamina > 3 && player.hunger > 8;
       const speed = sprinting ? 205 : 145;
       let dir = 0;
@@ -971,6 +1113,15 @@
       }
       // 怪物生成（每15秒在地下深处生成一只）
       mobSpawnAccum += dt;
+      // 蝙蝠群：深处有概率成群生成
+      const py2 = Math.floor(player.y / TILE);
+      if (py2 > 20 && Math.random() < 0.004 && mobs.length < 12) {
+        mobs.push({ x: player.x + (Math.random()-0.5)*120, y: player.y - 20, vx: 0, vy: 0, w: 16, h: 14, hp: 4, maxHp: 4, atkTimer: 0, grounded: false, attackCooldown: 0, wingAngle: Math.random()*6, wanderTimer: 0.5, wanderTarget: null, type: 'bat' });
+        if (Math.random() < 0.4) mobs.push({ x: player.x + (Math.random()-0.5)*100, y: player.y - 30, vx: 0, vy: 0, w: 16, h: 14, hp: 4, maxHp: 4, atkTimer: 0, grounded: false, attackCooldown: 0, wingAngle: Math.random()*6, wanderTimer: 0.5, wanderTarget: null, type: 'bat' });
+        if (Math.random() < 0.2) mobs.push({ x: player.x + (Math.random()-0.5)*80, y: player.y - 10, vx: 0, vy: 0, w: 16, h: 14, hp: 4, maxHp: 4, atkTimer: 0, grounded: false, attackCooldown: 0, wingAngle: Math.random()*6, wanderTimer: 0.5, wanderTarget: null, type: 'bat' });
+      }
+      // 普通怪物
+      mobSpawnAccum += dt;
       if (mobSpawnAccum >= 15 && mobs.length < 8) {
         mobSpawnAccum = 0;
         const px = Math.floor(player.x / TILE);
@@ -1022,6 +1173,32 @@
         }
       }
       if (mobDmgAccum >= 1) mobDmgAccum = 0;
+      // ── 蝙蝠AI ──
+      for (const m of mobs) {
+        if (m.type !== 'bat') continue;
+        const bdx = player.x - m.x, bdy = player.y - m.y;
+        const bdist = Math.sqrt(bdx*bdx + bdy*bdy);
+        m.wingAngle = (m.wingAngle||0) + dt*18;
+        m.wanderTimer = (m.wanderTimer||0) - dt;
+        if (bdist < 120) {
+          m.vx += (bdx/bdist)*70*dt*3 + (Math.random()-0.5)*20*dt;
+          m.vy += (bdy/bdist)*70*dt*3 + (Math.random()-0.5)*20*dt;
+        } else if (m.wanderTimer <= 0) {
+          m.wanderTimer = 0.5+Math.random();
+          const a = Math.random()*Math.PI*2;
+          m.vx = Math.cos(a)*40; m.vy = Math.sin(a)*40;
+        }
+        const spd = Math.sqrt(m.vx*m.vx+m.vy*m.vy);
+        if (spd>120) { m.vx=m.vx/spd*120; m.vy=m.vy/spd*120; }
+        m.vx*=0.92; m.vy*=0.92;
+        m.x += m.vx*dt; m.y += m.vy*dt;
+        m.attackCooldown = Math.max(0, (m.attackCooldown||0)-dt);
+        if (bdist<18 && (m.attackCooldown||0)<=0) {
+          player.health = Math.max(0, player.health-2);
+          m.attackCooldown = 0.8;
+          spawnParticles(player.x, player.y, '#f44', 3);
+        }
+      }
       // 大黄蜂生成（每10秒从天上出现，30秒找不到玩家则落地近战）
       beeSpawnAccum += dt;
       if (beeSpawnAccum >= 10 && bees.length < 20) {
@@ -1680,7 +1857,9 @@
       if (e.code === 'KeyT') { craftAtWorkbench(); renderInventory(); }
       if (e.code === 'KeyY') { selected = HOTBAR.indexOf('workbench'); renderInventory(); }
       if (e.code === 'KeyF') { eatApple(); renderInventory(); }
-      if (e.code === 'KeyK') { tryCook(); renderInventory(); showMessage('🍖 尝试烤肉...'); }
+      if (e.code === 'KeyK') { tryCook(); renderInventory(); }
+      if (e.code === 'KeyB') { trySleep(); }
+      if (e.code === 'KeyB') { trySleep(); }
       if (e.code === 'KeyR') { resetPlayer(true); generateWorld(true); initGame(); }
       if (e.code === 'KeyP') { saveGame(); renderInventory(); }
       if (e.code === 'KeyL') { loadGame(); renderInventory(); }
