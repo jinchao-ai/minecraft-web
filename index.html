@@ -439,7 +439,7 @@
 
     function mineBlock(tx, ty, dt) {
       const type = getBlock(tx, ty);
-      if (type === 'air' || type === 'water') return false;
+      if (type === 'air' || type === 'water' || type === 'poison_gas') return false;
       const same = mineTarget && mineTarget.x === tx && mineTarget.y === ty;
       if (!same) { mineTarget = { x: tx, y: ty }; mineProgress = 0; }
       const block = BLOCKS[type];
@@ -760,25 +760,27 @@
       mobDmgAccum += dt;
       for (let i = mobs.length - 1; i >= 0; i--) {
         const m = mobs[i];
-        // 移向玩家
+        // 移向玩家（只在地下移向玩家）
         const dx = player.x - m.x;
         const speed = 72;
         m.vx += Math.sign(dx) * speed * dt * 4;
         m.vx *= 0.85;
         m.x += m.vx * dt;
-        m.y += m.vy * dt;
-        // 重力
+        // 重力（一直有）
         m.vy += 600 * dt;
         m.vy = Math.min(m.vy, 400);
-        // 碰撞地面
-        const my1 = Math.floor(m.y / TILE);
+        m.y += m.vy * dt;
+        // 碰撞地面 - 检查脚下是否solid
         const my2 = Math.floor((m.y + m.h) / TILE);
-        const mx1 = Math.floor((m.x + 4) / TILE);
-        const mx2 = Math.floor((m.x + m.w - 4) / TILE);
-        if (world[my2] && world[my2][mx1] !== 'air' && world[my2][mx1] !== 'water' && world[my2][mx1] !== 'poison_gas') {
+        const mx = Math.floor((m.x + m.w / 2) / TILE);
+        const groundType = (world[my2] && world[my2][mx]) ? world[my2][mx] : 'air';
+        if (groundType !== 'air' && groundType !== 'water' && groundType !== 'poison_gas' && groundType !== 'fire') {
           m.y = my2 * TILE - m.h;
           m.vy = 0;
         }
+        // 超出地下范围则删除
+        const mby = Math.floor((m.y + m.h / 2) / TILE);
+        if (mby < 10) { mobs.splice(i, 1); continue; }
         // 碰到玩家扣血
         if (mobDmgAccum >= 1) {
           if (Math.abs(m.x - player.x) < (m.w + player.w) * 0.6 && Math.abs(m.y - player.y) < (m.h + player.h) * 0.6) {
@@ -1245,7 +1247,12 @@
       document.querySelector('#hunger b').textContent = Math.round(player.hunger);
       document.querySelector('#stamina b').textContent = Math.round(player.stamina);
       const hour = Math.floor(time * 24);
-      document.getElementById('worldInfo').textContent = `坐标 ${Math.floor(player.x / TILE)}, ${Math.floor(player.y / TILE)} · ${String(hour).padStart(2, '0')}:00`;
+      const px = Math.floor(player.x / TILE), py = Math.floor(player.y / TILE);
+      let info = `坐标 ${px}, ${py} · ${String(hour).padStart(2, '0')}:00`;
+      if (boss) info += ' 💀BOSS';
+      if (bees.length > 0) info += ` 🐝×${bees.length}`;
+      if (mobs.length > 0) info += ` 🧟×${mobs.length}`;
+      document.getElementById('worldInfo').textContent = info;
       renderInventory();
       if (messageTimer > 0) {
         messageTimer -= 1 / 60;
