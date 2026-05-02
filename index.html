@@ -327,7 +327,7 @@
     };
 
     const HOTBAR = ['grass', 'dirt', 'stone', 'wood', 'coal', 'iron', 'sand', 'leaves', 'plank', 'stick', 'workbench', 'wood_pickaxe', 'apple'];
-    const inventory = { grass: 4, dirt: 8, stone: 4, wood: 0, leaves: 0, sand: 0, coal: 0, iron: 0, plank: 0, stick: 0, wood_pickaxe: 0, workbench: 0, torch: 3, apple: 64 };
+    const inventory = { grass: 4, dirt: 8, stone: 4, wood: 0, leaves: 0, sand: 0, coal: 0, iron: 0, copper: 0, gold: 0, diamond: 0, emerald: 0, plank: 0, stick: 0, wood_pickaxe: 0, workbench: 0, torch: 3, apple: 64 };
     let selected = 0;
     let world = [];
     let particles = [];
@@ -382,8 +382,16 @@
           let block = 'stone';
           if (y === surface) block = x % 37 < 5 ? 'sand' : 'grass';
           else if (y < surface + 5) block = x % 37 < 5 ? 'sand' : 'dirt';
-          if (y > surface + 9 && noise(x * 3.1 + y * 8.8) > 0.91) block = 'coal';
-          if (y > surface + 18 && noise(x * 5.7 + y * 2.3) > 0.945) block = 'iron';
+          // 深层矿石分布
+          if (y > surface + 9) {
+            if (noise(x * 3.1 + y * 8.8) > 0.91) block = 'coal';
+            if (y > surface + 18 && noise(x * 5.7 + y * 2.3) > 0.945) block = 'iron';
+            if (y > surface + 26 && noise(x * 7.3 + y * 3.7) > 0.958) block = 'copper';
+            if (y > surface + 33 && noise(x * 9.1 + y * 4.2) > 0.965) block = 'gold';
+            if (y > surface + 40 && noise(x * 11.2 + y * 5.1) > 0.972) block = 'diamond';
+            if (y > surface + 36 && noise(x * 8.4 + y * 6.3) > 0.97) block = 'emerald';
+            if (y > surface + 45 && noise(x * 6.8 + y * 9.9) > 0.978) block = 'lava';
+          }
           world[y][x] = block;
         }
         if (x % 14 === 4 && x > 8 && x < WORLD_W - 8 && world[surface][x] === 'grass') {
@@ -393,6 +401,10 @@
           for (let y = surface - 1; y < Math.min(surface + 2, WORLD_H); y++) world[y][x] = 'water';
         }
       }
+      // 矿洞生成（地下深层y>45，随机挖空形成洞穴）
+      generateCaves();
+      // 地下迷宫（深层y=38~52层）
+      generateMaze(38, 52);
       spawn = { x: 9 * TILE, y: 20 * TILE };
       // 随机出生点（地图随机位置）
       const baseX = Math.floor(20 + Math.random() * (WORLD_W - 50));
@@ -415,7 +427,128 @@
       }
       resetPlayer(false);
       clouds = Array.from({ length: 12 }, (_, i) => ({ x: i * 520 + noise(i) * 180, y: 50 + noise(i + 8) * 90, s: 0.8 + noise(i + 20) * 0.8 }));
-      showMessage(fresh ? '🌍 新世界已生成，随机出生点！' : '世界已重置。');
+
+      // ══════════════════════════════════════
+      //  地下洞穴生成
+      // ══════════════════════════════════════
+      function generateCaves() {
+        for (let i = 0; i < 30; i++) {
+          const cx = Math.floor(5 + Math.random() * (WORLD_W - 10));
+          const cy = Math.floor(42 + Math.random() * 25);
+          const size = Math.floor(4 + Math.random() * 6);
+          for (let dx = -size; dx <= size; dx++) {
+            for (let dy = -size; dy <= size; dy++) {
+              if (dx * dx + dy * dy <= size * size) {
+                const nx = cx + dx, ny = cy + dy;
+                if (nx > 0 && nx < WORLD_W - 1 && ny > 35 && ny < WORLD_H - 1) {
+                  const b = world[ny][nx];
+                  if (b !== 'air' && b !== 'water' && b !== 'lava' && b !== 'treasure') world[ny][nx] = 'air';
+                }
+              }
+            }
+          }
+          // 洞穴连接通道
+          const steps = Math.floor(10 + Math.random() * 15);
+          let cx2 = cx, cy2 = cy;
+          for (let s = 0; s < steps; s++) {
+            cx2 += Math.floor(Math.random() * 3) - 1;
+            cy2 += Math.floor(Math.random() * 3) - 1;
+            if (cx2 > 1 && cx2 < WORLD_W - 1 && cy2 > 35 && cy2 < WORLD_H - 1) {
+              if (world[cy2][cx2] !== 'lava' && world[cy2][cx2] !== 'treasure') world[cy2][cx2] = 'air';
+              // 通道宽一些
+              for (let w = -1; w <= 1; w++) {
+                if (world[cy2 + w] && world[cy2 + w][cx2] !== 'lava' && world[cy2 + w][cx2] !== 'treasure') world[cy2 + w][cx2] = 'air';
+              }
+            }
+          }
+        }
+      }
+
+      // ══════════════════════════════════════
+      //  地下迷宫生成（给定Y轴范围）
+      // ══════════════════════════════════════
+      function generateMaze(startY, endY) {
+        const cellSize = 7; // 每格单元大小
+        for (let section = 0; section < 3; section++) {
+          const offsetX = Math.floor(3 + section * (WORLD_W / 3));
+          const mazeW = Math.floor(Math.min((WORLD_W - 6) / 3, 35));
+          const mazeH = Math.floor(Math.min(endY - startY, 12));
+          const grid = Array.from({ length: mazeH }, () => Array(mazeW).fill(1));
+          // 递归回溯生成迷宫
+          function carve(cx, cy) {
+            grid[cy][cx] = 0;
+            const dirs = [[0,-2],[2,0],[0,2],[-2,0]];
+            for (let i = dirs.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
+            }
+            for (const [dx, dy] of dirs) {
+              const nx = cx + dx, ny = cy + dy;
+              if (nx > 0 && nx < mazeW - 1 && ny > 0 && ny < mazeH - 1 && grid[ny][nx] === 1) {
+                grid[cy + dy / 2][cx + dx / 2] = 0;
+                carve(nx, ny);
+              }
+            }
+          }
+          carve(1, 1);
+          // 转换为世界坐标
+          for (let gy = 0; gy < mazeH; gy++) {
+            for (let gx = 0; gx < mazeW; gx++) {
+              const wx = offsetX + gx * cellSize;
+              const wy = startY + gy;
+              if (gy < grid.length && gx < grid[0].length) {
+                if (grid[gy][gx] === 0) {
+                  // 通路：挖空
+                  for (let ddx = 0; ddx < cellSize; ddx++) {
+                    for (let ddy = 0; ddy < cellSize; ddy++) {
+                      const bx = wx + ddx, by = wy + ddy;
+                      if (bx > 0 && bx < WORLD_W - 1 && by > 0 && by < WORLD_H - 1) {
+                        if (world[by][bx] !== 'lava' && world[by][bx] !== 'treasure') world[by][bx] = 'air';
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+          // 迷宫内随机放宝箱（每个迷宫的终点区域）
+          const treasureSpots = [];
+          for (let gy = mazeH - 3; gy < mazeH; gy++) {
+            for (let gx = mazeW - 3; gx < mazeW; gx++) {
+              if (gy > 0 && gy < mazeH - 1 && gx > 0 && gx < mazeW - 1 && grid[gy] && grid[gy][gx] === 0) {
+                treasureSpots.push({ gx, gy });
+              }
+            }
+          }
+          if (treasureSpots.length > 0) {
+            const spot = treasureSpots[Math.floor(Math.random() * treasureSpots.length)];
+            const tx = offsetX + spot.gx * cellSize + Math.floor(cellSize / 2);
+            const ty = startY + spot.gy + 1;
+            if (ty > 0 && ty < WORLD_H - 1 && tx > 0 && tx < WORLD_W - 1) {
+              if (world[ty][tx] === 'air') world[ty][tx] = 'treasure';
+            }
+          }
+        }
+      }
+
+      // ══════════════════════════════════════
+      //  宝箱奖励
+      // ══════════════════════════════════════
+      function openTreasure() {
+        if (getBlock(Math.floor(player.x / TILE), Math.floor(player.y / TILE) - 1) === 'treasure') {
+          const roll = Math.random();
+          let reward = '';
+          if (roll < 0.3) { reward = '铁锭+3'; inventory.iron = (inventory.iron || 0) + 3; }
+          else if (roll < 0.55) { reward = '钻石+1'; inventory.diamond = (inventory.diamond || 0) + 1; }
+          else if (roll < 0.75) { reward = '金锭+2'; inventory.gold = (inventory.gold || 0) + 2; }
+          else if (roll < 0.9) { reward = '绿宝石+1'; inventory.emerald = (inventory.emerald || 0) + 1; }
+          else { reward = '苹果+5'; inventory.apple = (inventory.apple || 0) + 5; }
+          setBlock(Math.floor(player.x / TILE), Math.floor(player.y / TILE) - 1, 'air');
+          showMessage('📦 获得：' + reward + '！');
+        }
+      }
+
+            showMessage(fresh ? '🌍 新世界已生成，随机出生点！' : '世界已重置。');
     }
 
     function plantTree(x, y) {
