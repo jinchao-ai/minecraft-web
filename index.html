@@ -342,6 +342,9 @@
     let messageTimer = 0;
     let waterTickAccum = 0;
     let poisonTickAccum = 0;
+    let mobs = [];
+    let mobSpawnAccum = 0;
+    let mobDmgAccum = 0;
 
     const player = {
       x: spawn.x, y: spawn.y, w: 21, h: 29, vx: 0, vy: 0,
@@ -723,6 +726,59 @@
           }
         }
       }
+      // 怪物生成（每15秒在地下深处生成一只）
+      mobSpawnAccum += dt;
+      if (mobSpawnAccum >= 15 && mobs.length < 8) {
+        mobSpawnAccum = 0;
+        const px = Math.floor(player.x / TILE);
+        const py = Math.floor(player.y / TILE);
+        let solidAbove = 0;
+        for (let i = 1; i <= 10; i++) {
+          if (py - i < 0) break;
+          const b = world[py - i][px];
+          if (b !== 'air' && b !== 'water' && b !== 'poison_gas') solidAbove++;
+        }
+        if (solidAbove >= 5) {
+          const sx = Math.max(1, Math.min(WORLD_W - 2, px + Math.floor(Math.random() * 11) - 5));
+          const sy = Math.max(1, Math.min(WORLD_H - 2, py + Math.floor(Math.random() * 5) - 2));
+          if (world[sy][sx] === 'air') {
+            mobs.push({ x: sx * TILE, y: sy * TILE, w: 22, h: 26, vx: 0, vy: 0, hp: 30, type: Math.random() < 0.5 ? 'zombie' : 'skeleton' });
+            showMessage('⚠️ 怪物出现！');
+          }
+        }
+      }
+      // 怪物移动与碰撞扣血
+      mobDmgAccum += dt;
+      for (let i = mobs.length - 1; i >= 0; i--) {
+        const m = mobs[i];
+        // 移向玩家
+        const dx = player.x - m.x;
+        const speed = 72;
+        m.vx += Math.sign(dx) * speed * dt * 4;
+        m.vx *= 0.85;
+        m.x += m.vx * dt;
+        m.y += m.vy * dt;
+        // 重力
+        m.vy += 600 * dt;
+        m.vy = Math.min(m.vy, 400);
+        // 碰撞地面
+        const my1 = Math.floor(m.y / TILE);
+        const my2 = Math.floor((m.y + m.h) / TILE);
+        const mx1 = Math.floor((m.x + 4) / TILE);
+        const mx2 = Math.floor((m.x + m.w - 4) / TILE);
+        if (world[my2] && world[my2][mx1] !== 'air' && world[my2][mx1] !== 'water' && world[my2][mx1] !== 'poison_gas') {
+          m.y = my2 * TILE - m.h;
+          m.vy = 0;
+        }
+        // 碰到玩家扣血
+        if (mobDmgAccum >= 1) {
+          if (Math.abs(m.x - player.x) < (m.w + player.w) * 0.6 && Math.abs(m.y - player.y) < (m.h + player.h) * 0.6) {
+            player.health = Math.max(0, player.health - 5);
+            if (Math.random() < 0.1) showMessage('👊 受到攻击！');
+          }
+        }
+      }
+      if (mobDmgAccum >= 1) mobDmgAccum = 0;
       updateCamera();
       updateHud();
     }
@@ -765,6 +821,7 @@
       ctx.save();
       ctx.translate(-Math.floor(camera.x), -Math.floor(camera.y));
       drawWorld(day);
+      drawMobs(day);
       drawParticles();
       drawPlayer();
       drawTarget();
@@ -828,6 +885,29 @@
             ctx.fillText(b.emoji, px + 6, py + 23);
           }
         }
+      }
+    }
+
+    function drawMobs(day) {
+      for (const m of mobs) {
+        const sx = m.x - camera.x;
+        const sy = m.y - camera.y;
+        if (sx < -50 || sx > canvas.width + 50 || sy < -50 || sy > canvas.height + 50) continue;
+        const facing = m.vx >= 0 ? 1 : -1;
+        ctx.save();
+        ctx.translate(sx + m.w / 2, sy + m.h / 2);
+        if (facing < 0) ctx.scale(-1, 1);
+        ctx.fillStyle = m.type === 'zombie' ? '#2d5a1e' : '#8a7a6a';
+        ctx.fillRect(-m.w / 2, -m.h / 2 + 4, m.w, m.h - 4);
+        ctx.fillStyle = m.type === 'zombie' ? '#4a7a30' : '#c4a882';
+        ctx.fillRect(-m.w / 2 + 3, -m.h / 2, m.w - 6, 12);
+        ctx.fillStyle = '#ff3333';
+        ctx.fillRect(-4, -m.h / 2 + 3, 3, 3);
+        ctx.fillRect(1, -m.h / 2 + 3, 3, 3);
+        ctx.fillStyle = '#333';
+        ctx.fillRect(-m.w / 2 + 2, m.h / 2 - 6, 8, 6);
+        ctx.fillRect(m.w / 2 - 10, m.h / 2 - 6, 8, 6);
+        ctx.restore();
       }
     }
 
