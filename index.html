@@ -1169,7 +1169,7 @@
         }
       }
       // 怪物生成（每15秒在地下深处生成一只）
-      mobSpawnAccum += dt;
+      // mobSpawnAccum += dt; // disabled: unified spawn
       // 蝙蝠群：深处有概率成群生成
       const py2 = Math.floor(player.y / TILE);
       if (py2 > 20 && Math.random() < 0.004 && mobs.length < 12) {
@@ -1179,22 +1179,60 @@
       }
       // 普通怪物
       mobSpawnAccum += dt;
-      if (mobSpawnAccum >= 15 && mobs.length < 8) {
-        mobSpawnAccum = 0;
-        const px = Math.floor(player.x / TILE);
-        const py = Math.floor(player.y / TILE);
-        let solidAbove = 0;
-        for (let i = 1; i <= 10; i++) {
-          if (py - i < 0) break;
-          const b = world[py - i][px];
-          if (b !== 'air' && b !== 'water' && b !== 'poison_gas') solidAbove++;
+      // [disabled] 怪物生成：每15秒 → 移至统一刷新机制（每60秒）
+      // if (mobSpawnAccum >= 15 && mobs.length < 8) {
+      //   mobSpawnAccum = 0;
+      //   const px = Math.floor(player.x / TILE);
+      //   const py = Math.floor(player.y / TILE);
+      //   let solidAbove = 0;
+      //   for (let i = 1; i <= 10; i++) {
+      //     if (py - i < 0) break;
+      //     const b = world[py - i][px];
+      //     if (b !== 'air' && b !== 'water' && b !== 'poison_gas') solidAbove++;
+      //   }
+      //   if (solidAbove >= 5) {
+      //     const sx = Math.max(1, Math.min(WORLD_W - 2, px + Math.floor(Math.random() * 11) - 5));
+      //     const sy = Math.max(1, Math.min(WORLD_H - 2, py + Math.floor(Math.random() * 5) - 2));
+      //     if (world[sy][sx] === 'air') {
+      //       mobs.push({ x: sx * TILE, y: sy * TILE, w: 22, h: 26, vx: 0, vy: 0, hp: 30, type: Math.random() < 0.5 ? 'zombie' : 'skeleton' });
+      //       showMessage('⚠️ 怪物出现！');
+      //     }
+      //   }
+      // }
+      // ── 统一刷新：每60秒刷新一只敌对实体（大黄蜂打死后1分钟复活） ──
+      unifiedSpawnAccum += dt;
+      if (unifiedSpawnAccum >= 60) {
+        unifiedSpawnAccum = 0;
+        let revived = false;
+        for (const id in beeDeathTime) {
+          if (time - beeDeathTime[id] >= 60) {
+            delete beeDeathTime[id];
+            const px = Math.floor(player.x / TILE);
+            const py = Math.floor(player.y / TILE);
+            const bx = Math.max(1, Math.min(WORLD_W - 2, px + Math.floor(Math.random() * 9) - 4));
+            const by = Math.max(1, Math.min(Math.floor(WORLD_H / 2), py - 10 - Math.floor(Math.random() * 10)));
+            bees.push({ x: bx * TILE, y: by * TILE, w: 24, h: 20, vx: 0, vy: 0, hp: 10, shootTimer: Math.random() * 2, moveTimer: 0, targetX: 0, targetY: 0, grounded: false, seekTimer: 0, _id: Date.now() + Math.random() });
+            showMessage('🐝 大黄蜂再次出现！');
+            revived = true;
+            break;
+          }
         }
-        if (solidAbove >= 5) {
-          const sx = Math.max(1, Math.min(WORLD_W - 2, px + Math.floor(Math.random() * 11) - 5));
-          const sy = Math.max(1, Math.min(WORLD_H - 2, py + Math.floor(Math.random() * 5) - 2));
-          if (world[sy][sx] === 'air') {
-            mobs.push({ x: sx * TILE, y: sy * TILE, w: 22, h: 26, vx: 0, vy: 0, hp: 30, type: Math.random() < 0.5 ? 'zombie' : 'skeleton' });
-            showMessage('⚠️ 怪物出现！');
+        if (!revived && mobs.length < 8) {
+          const px = Math.floor(player.x / TILE);
+          const py = Math.floor(player.y / TILE);
+          let solidAbove = 0;
+          for (let i = 1; i <= 10; i++) {
+            if (py - i < 0) break;
+            const b = world[py - i][px];
+            if (b !== 'air' && b !== 'water' && b !== 'poison_gas') solidAbove++;
+          }
+          if (solidAbove >= 5) {
+            const sx = Math.max(1, Math.min(WORLD_W - 2, px + Math.floor(Math.random() * 11) - 5));
+            const sy = Math.max(1, Math.min(WORLD_H - 2, py + Math.floor(Math.random() * 5) - 2));
+            if (world[sy][sx] === 'air') {
+              mobs.push({ x: sx * TILE, y: sy * TILE, w: 22, h: 26, vx: 0, vy: 0, hp: 30, type: Math.random() < 0.5 ? 'zombie' : 'skeleton' });
+              showMessage('⚠️ 怪物出现！');
+            }
           }
         }
       }
@@ -1257,16 +1295,17 @@
         }
       }
       // 大黄蜂生成（每10秒从天上出现，30秒找不到玩家则落地近战）
-      beeSpawnAccum += dt;
-      if (beeSpawnAccum >= 10 && bees.length < 20) {
-        beeSpawnAccum = 0;
-        const px = Math.floor(player.x / TILE);
-        const py = Math.floor(player.y / TILE);
-        const bx = Math.max(1, Math.min(WORLD_W - 2, px + Math.floor(Math.random() * 9) - 4));
-        const by = Math.max(1, Math.min(Math.floor(WORLD_H / 2), py - 10 - Math.floor(Math.random() * 10)));
-        bees.push({ x: bx * TILE, y: by * TILE, w: 24, h: 20, vx: 0, vy: 0, hp: 10, shootTimer: Math.random() * 2, moveTimer: 0, targetX: 0, targetY: 0, grounded: false, seekTimer: 0 });
-        if (bees.length === 1) showMessage('🐝 大黄蜂来袭！');
-      }
+      beeSpawnAccum += dt; // (kept for legacy tracking only)
+      // [disabled] 大黄蜂生成：每10秒 → 移至统一刷新机制（每60秒，打死后1分钟复活）
+      // if (beeSpawnAccum >= 10 && bees.length < 20) {
+      //   beeSpawnAccum = 0;
+      //   const px = Math.floor(player.x / TILE);
+      //   const py = Math.floor(player.y / TILE);
+      //   const bx = Math.max(1, Math.min(WORLD_W - 2, px + Math.floor(Math.random() * 9) - 4));
+      //   const by = Math.max(1, Math.min(Math.floor(WORLD_H / 2), py - 10 - Math.floor(Math.random() * 10)));
+      //   bees.push({ x: bx * TILE, y: by * TILE, w: 24, h: 20, vx: 0, vy: 0, hp: 10, shootTimer: Math.random() * 2, moveTimer: 0, targetX: 0, targetY: 0, grounded: false, seekTimer: 0 });
+      //   if (bees.length === 1) showMessage('🐝 大黄蜂来袭！');
+      // }
       // 大黄蜂行为（实体化：追踪→30秒找不到玩家则落地近战）
       for (let i = bees.length - 1; i >= 0; i--) {
         const b = bees[i];
@@ -1305,7 +1344,7 @@
             beeStingers.push({ x: b.x + b.w / 2, y: b.y + b.h / 2, vx: bdx / Math.max(1, bdist) * 180, vy: bdy / Math.max(1, bdist) * 180, life: 3 });
           }
         }
-        if (b.hp <= 0) { bees.splice(i, 1); showMessage('🐝 消灭大黄蜂！'); }
+        if (b.hp <= 0) { beeDeathTime[b._id || Date.now()] = time; bees.splice(i, 1); showMessage('🐝 消灭大黄蜂！'); }
       }
       // 毒针移动
       for (let i = beeStingers.length - 1; i >= 0; i--) {
