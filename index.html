@@ -282,9 +282,8 @@
     <section class="card help">
       <p><b>操作</b> WASD移动，空格跳跃，Shift疾跑。</p>
       <p>左键/长按挖掘，右键放置，1-8切换方块。</p>
-      <p>E徒手合成木板，T使用工作台合成，R重生，P保存，L读取。</p>
-      <p><b>合成链</b> 原木→木板→木板→木棍→木镐 | 煤矿+木棍→火把</p>
-      <p>先砍树→原木合成木板→4木板放工作台→合成木棍/木镐</p>
+      <p>E徒手合成木板，Q合成工作台，T使用工作台合成，R重生，P保存，L读取。</p>
+      <p><b>合成</b> 原木→木板(E)→工作台(Q)→木棍/木镐/火把(T靠近工作台)</p>
     </section>
     <div class="touch-controls">
       <div class="pad">
@@ -487,9 +486,22 @@
       return false;
     }
 
+    // 合成工作台（不需要工作台就能合成）
+    function craftWorkbench() {
+      if (inventory.plank < 4) {
+        showMessage('需要4个木板才能合成工作台（当前：' + inventory.plank + '个）');
+        return false;
+      }
+      inventory.plank -= 4;
+      inventory.workbench++;
+      showMessage('合成工作台！右键放置到地上再使用。');
+      return true;
+    }
+
+    // 工作台高级合成（必须在工作台2格内）
     function craftAtWorkbench() {
       if (!getNearbyWorkbench()) {
-        showMessage('附近没有工作台，无法合成高级物品。');
+        showMessage('附近没有工作台（站在工作台2格内）');
         return false;
       }
       // 合成木棍：2木板 → 4木棍
@@ -515,7 +527,7 @@
         showMessage('工作台：1煤矿+1木棍 → 4火把 ✓');
         return true;
       }
-      showMessage('工作台合成：需要木板/煤矿+木棍。');
+      showMessage('工作台合成：需要木板或煤矿+木棍。');
       return false;
     }
 
@@ -874,9 +886,10 @@
     window.addEventListener('keydown', e => {
       keys.add(e.code);
       if (/Digit[1-8]/.test(e.code)) selected = Number(e.code.slice(5)) - 1;
+      if (e.code === 'KeyQ') craftWorkbench();
       if (e.code === 'KeyE') {
         if (HOTBAR[selected] === 'workbench') placeWorkbench();
-        else if (inventory.plank >= 2 || inventory.plank >= 3 || (inventory.coal >= 1 && inventory.stick >= 1)) craftAtWorkbench();
+        else if (getNearbyWorkbench() && (inventory.plank >= 2 || (inventory.plank >= 3 && inventory.stick >= 2) || (inventory.coal >= 1 && inventory.stick >= 1))) craftAtWorkbench();
         else craftPlanks();
       }
       if (e.code === 'KeyT') craftAtWorkbench();
