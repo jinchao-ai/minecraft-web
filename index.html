@@ -621,7 +621,7 @@
       if (!same) { mineTarget = { x: tx, y: ty }; mineProgress = 0; }
       const block = BLOCKS[type];
       const toolBonus = inventory.wood_pickaxe > 0 && ['stone','coal','iron','copper','gold'].includes(type) ? 1.4 : 1;
-      mineProgress += 1; // 单击一次=1次命中
+      mineProgress = block.hardness; // 一击必破
       player.stamina = Math.max(0, player.stamina - 1.5);
       if (mineProgress >= block.hardness) {
         setBlock(tx, ty, 'air');
