@@ -371,8 +371,7 @@
     let beeSpawnAccum = 0;
     let dayKilledMobs = false;
     // 毒气周期：每60秒激活15秒
-    const POISON_ON = 15, POISON_CYCLE = 60;
-    let poisonCycleTimer = 0; // 白天已清怪标志，夜晚重置
+    let poisonCycleTimer = 0; // (已废弃，毒气系统关闭)
 
     const player = {
       x: spawn.x, y: spawn.y, w: 21, h: 29, vx: 0, vy: 0,
@@ -934,7 +933,7 @@
       if (time > 0.72) dayKilledMobs = false; // 夜晚重置标志
       // ── 毒气周期计时 ──
       poisonCycleTimer = (poisonCycleTimer + dt) % POISON_CYCLE;
-      const poisonGasActive = poisonCycleTimer < POISON_ON;
+      const poisonGasActive = false; // 毒气系统已关闭
       // ── 30分钟自动锁定检测 ──
       if (gameState === 'playing' && !isResting) {
         const elapsed = Date.now() - parseInt(localStorage.getItem(gameStartKey) || Date.now().toString());
