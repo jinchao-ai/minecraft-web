@@ -324,7 +324,7 @@
       apple: { emoji: '🍎', color: '#d84f37', solid: false, hardness: 0, name: '苹果' }
     };
 
-    const HOTBAR = ['grass', 'dirt', 'stone', 'wood', 'leaves', 'sand', 'plank', 'workbench', 'wood_pickaxe', 'apple'];
+    const HOTBAR = ['grass', 'dirt', 'stone', 'wood', 'coal', 'iron', 'plank', 'workbench', 'wood_pickaxe', 'apple'];
     const inventory = { grass: 4, dirt: 8, stone: 4, wood: 0, leaves: 0, sand: 0, coal: 0, iron: 0, plank: 0, stick: 0, wood_pickaxe: 0, workbench: 0, torch: 3, apple: 64 };
     let selected = 0;
     let world = [];
@@ -430,7 +430,7 @@
       const same = mineTarget && mineTarget.x === tx && mineTarget.y === ty;
       if (!same) { mineTarget = { x: tx, y: ty }; mineProgress = 0; }
       const block = BLOCKS[type];
-      const toolBonus = inventory.iron > 0 && ['stone', 'coal', 'iron'].includes(type) ? 1.45 : 1;
+      const toolBonus = inventory.wood_pickaxe > 0 && ['stone', 'coal', 'iron'].includes(type) ? 1.45 : 1;
       mineProgress += dt * toolBonus * (player.stamina > 8 ? 1 : 0.55);
       player.stamina = Math.max(0, player.stamina - dt * 2.3);
       if (mineProgress >= block.hardness) {
