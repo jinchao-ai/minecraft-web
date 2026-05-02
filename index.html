@@ -280,7 +280,7 @@
     <div class="crosshair"></div>
     <section class="card inventory" id="inventory"></section>
     <section class="card help">
-      <p><b>操作</b> WASD移动，空格跳跃，Shift疾跑。左键挖掘，右键放置。</p>
+      <p><b>操作</b> WASD移动，空格跳跃，Shift疾跑。左键挖掘，右键攻击怪物/放置方块。</p>
       <p>1-9/0/-选择快捷栏，E木板，Q工作台，T工作台合成，F吃苹果。</p>
       <p><b>合成</b> 原木→木板(E)→木板→工作台(Q)→木棍/木镐/火把(T)</p>
     </section>
@@ -561,7 +561,7 @@
     }
 
     function saveGame() {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time }));
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs }));
       showMessage('已保存世界。');
     }
 
@@ -573,6 +573,7 @@
       Object.assign(inventory, data.inventory);
       Object.assign(player, data.player, { vx: 0, vy: 0 });
       time = data.time || 0.2;
+      mobs = data.mobs || [];
       showMessage('已读取存档。');
       return true;
     }
@@ -1025,7 +1026,7 @@
       autoSaveTimer += dt;
       if (autoSaveTimer >= 30) {
         autoSaveTimer = 0;
-        localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time }));
+        localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs }));
       }
       requestAnimationFrame(loop);
     }
@@ -1067,21 +1068,42 @@
     canvas.addEventListener('pointermove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
     canvas.addEventListener('pointerdown', e => {
       mouse.x = e.clientX; mouse.y = e.clientY;
-      if (e.button === 2) placeBlock(targetFromPointer().x, targetFromPointer().y);
-      else mouse.down = true;
+      if (e.button === 2) {
+        // 右键：优先攻击怪物，否则放置方块
+        const cx = mouse.x + camera.x;
+        const cy = mouse.y + camera.y;
+        let hit = false;
+        for (let i = mobs.length - 1; i >= 0; i--) {
+          const m = mobs[i];
+          if (cx >= m.x && cx <= m.x + m.w && cy >= m.y && cy <= m.y + m.h) {
+            const dmg = inventory.wood_pickaxe > 0 ? 12 : 6;
+            m.hp -= dmg;
+            showMessage('⚔️ 攻击！-' + dmg);
+            if (m.hp <= 0) {
+              mobs.splice(i, 1);
+              showMessage('☠️ 击杀怪物！');
+            }
+            hit = true;
+            break;
+          }
+        }
+        if (!hit) placeBlock(targetFromPointer().x, targetFromPointer().y);
+      } else {
+        mouse.down = true;
+      }
     });
     window.addEventListener('pointerup', () => { mouse.down = false; mineProgress = 0; mineTarget = null; });
     canvas.addEventListener('contextmenu', e => e.preventDefault());
 
     // 页面关闭/刷新时自动保存
     window.addEventListener('beforeunload', () => {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time }));
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs }));
     });
 
     // 可见性变化时保存（切换标签页时）
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time }));
+        localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs }));
       }
     });
 
