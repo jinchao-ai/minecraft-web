@@ -571,19 +571,32 @@
     }
 
     function saveGame() {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
+      saveState();
       showMessage('已保存世界。');
+    }
+
+    function saveState() {
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss, bees, fireParticles, playerBullets, beeStingers }));
+    }
+
+    function loadState(data) {
+      world = data.world;
+      Object.assign(inventory, data.inventory);
+      Object.assign(player, data.player, { vx: 0, vy: 0 });
+      time = data.time || 0.2;
+      mobs = data.mobs || [];
+      boss = data.boss || null;
+      bees = data.bees || [];
+      fireParticles = data.fireParticles || [];
+      playerBullets = data.playerBullets || [];
+      beeStingers = data.beeStingers || [];
     }
 
     function loadGame() {
       const raw = localStorage.getItem(SAVE_KEY);
       if (!raw) { showMessage('没有存档。'); return false; }
       const data = JSON.parse(raw);
-      world = data.world;
-      Object.assign(inventory, data.inventory);
-      Object.assign(player, data.player, { vx: 0, vy: 0 });
-      time = data.time || 0.2;
-      mobs = data.mobs || [];
+      loadState(data);
       showMessage('已读取存档。');
       return true;
     }
@@ -699,7 +712,7 @@
         let solidAbove = 0;
         for (let i = 1; i <= 10; i++) {
           if (py - i < 0) break;
-          const b = world[py - i][px];
+          const b = px >= 0 && px < WORLD_W ? world[py - i][px] : 'air';
           if (b !== 'air' && b !== 'water' && b !== 'poison_gas') solidAbove++;
         }
         if (solidAbove >= 5 && py > 5) {
@@ -729,7 +742,9 @@
         const pby = Math.floor(player.y / TILE);
         for (let dy = 0; dy <= 1; dy++) {
           for (let dx = 0; dx <= 1; dx++) {
-            if (world[pby + dy] && world[pby + dy][pbx + dx] === 'poison_gas') {
+            const x = pbx + dx;
+            const y = pby + dy;
+            if (x >= 0 && x < WORLD_W && y >= 0 && y < WORLD_H && world[y][x] === 'poison_gas') {
               player.health = Math.max(0, player.health - 0.8);
               if (Math.random() < 0.03) showMessage('☠️ 毒气侵蚀！');
               break;
@@ -746,7 +761,7 @@
         let solidAbove = 0;
         for (let i = 1; i <= 10; i++) {
           if (py - i < 0) break;
-          const b = world[py - i][px];
+          const b = px >= 0 && px < WORLD_W ? world[py - i][px] : 'air';
           if (b !== 'air' && b !== 'water' && b !== 'poison_gas') solidAbove++;
         }
         if (solidAbove >= 5) {
@@ -775,7 +790,7 @@
         // 碰撞地面 - 检查脚下是否solid
         const my2 = Math.floor((m.y + m.h) / TILE);
         const mx = Math.floor((m.x + m.w / 2) / TILE);
-        const groundType = (world[my2] && world[my2][mx]) ? world[my2][mx] : 'air';
+        const groundType = (my2 >= 0 && my2 < WORLD_H && mx >= 0 && mx < WORLD_W) ? world[my2][mx] : 'air';
         if (groundType !== 'air' && groundType !== 'water' && groundType !== 'poison_gas' && groundType !== 'fire') {
           m.y = my2 * TILE - m.h;
           m.vy = 0;
@@ -813,7 +828,7 @@
           b.targetX = b.x + (Math.random() - 0.5) * TILE * 5;
           b.targetY = b.y + (Math.random() - 0.5) * TILE * 4;
           b.targetX = Math.max(0, Math.min(WORLD_W * TILE - b.w, b.targetX));
-          b.targetY = Math.max(TILE, Math.min(20 * TILE, b.targetY));
+          b.targetY = Math.max(TILE, Math.min(WORLD_H * TILE - b.h, b.targetY));
         }
         const ddx = b.targetX - b.x;
         const ddy = b.targetY - b.y;
@@ -841,15 +856,17 @@
         s.x += s.vx * dt;
         s.y += s.vy * dt;
         s.life -= dt;
-        // 命中玩家
-        if (Math.abs(s.x - player.x - player.w / 2) < 18 && Math.abs(s.y - player.y - player.h / 2) < 18) {
+        // 命中玩家（用格子坐标比较）
+        const sjx = Math.floor(s.x / TILE), sjy = Math.floor(s.y / TILE);
+        const pjx = Math.floor((player.x + player.w / 2) / TILE), pjy = Math.floor((player.y + player.h / 2) / TILE);
+        if (Math.abs(sjx - pjx) <= 1 && Math.abs(sjy - pjy) <= 1) {
           player.health = Math.max(0, player.health - 3);
           if (Math.random() < 0.1) showMessage('💉 被毒针刺中！');
           beeStingers.splice(i, 1);
           continue;
         }
-        // 落地消失
-        if (s.life <= 0 || s.y > WORLD_H * TILE) { beeStingers.splice(i, 1); }
+        // 越界或生命结束消失
+        if (s.life <= 0 || s.x < 0 || s.x >= WORLD_W * TILE || s.y < 0 || s.y >= WORLD_H * TILE) { beeStingers.splice(i, 1); }
       }
       // 玩家射击冷却
       shootCooldown = Math.max(0, shootCooldown - dt);
@@ -861,8 +878,13 @@
         b.life -= dt;
         const bx = Math.floor(b.x / TILE);
         const by = Math.floor(b.y / TILE);
-        // 撞到实心方块消失
-        if (b.life <= 0 || bx < 0 || bx >= WORLD_W || by < 0 || by >= WORLD_H || (world[by] && world[by][bx] !== 'air' && world[by][bx] !== 'water' && world[by][bx] !== 'poison_gas' && world[by][bx] !== 'fire')) {
+        // 撞到边界或实心方块消失
+        if (b.life <= 0 || bx < 0 || bx >= WORLD_W || by < 0 || by >= WORLD_H) {
+          playerBullets.splice(i, 1);
+          continue;
+        }
+        const worldType = world[by] ? (world[by][bx] || 'air') : 'air';
+        if (!['air', 'water', 'poison_gas', 'fire'].includes(worldType)) {
           playerBullets.splice(i, 1);
           continue;
         }
@@ -928,7 +950,7 @@
         const bmy2 = Math.floor((boss.y + boss.h) / TILE);
         const bmx1 = Math.floor((boss.x + 6) / TILE);
         const bmx2 = Math.floor((boss.x + boss.w - 6) / TILE);
-        if (world[bmy2] && world[bmy2][bmx1] !== 'air' && world[bmy2][bmx1] !== 'water' && world[bmy2][bmx1] !== 'poison_gas' && world[bmy2][bmx1] !== 'fire') {
+        if (bmy2 >= 0 && bmy2 < WORLD_H && bmx1 >= 0 && bmx1 < WORLD_W && world[bmy2][bmx1] !== 'air' && world[bmy2][bmx1] !== 'water' && world[bmy2][bmx1] !== 'poison_gas' && world[bmy2][bmx1] !== 'fire') {
           boss.y = bmy2 * TILE - boss.h;
           boss.vy = 0;
         }
@@ -1006,11 +1028,14 @@
       }
       // 火焰粒子更新
       for (let i = fireParticles.length - 1; i >= 0; i--) {
-        fireParticles[i].life -= dt;
-        fireParticles[i].x += fireParticles[i].vx * dt;
-        fireParticles[i].y += fireParticles[i].vy * dt;
-        fireParticles[i].vy += 30 * dt;
-        if (fireParticles[i].life <= 0) fireParticles.splice(i, 1);
+        const p = fireParticles[i];
+        p.vx ||= 0;
+        p.vy ||= 0;
+        p.life -= dt;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.vy += 30 * dt;
+        if (p.life <= 0) fireParticles.splice(i, 1);
       }
       // 玩家接触火焰扣血
       if (mobDmgAccum >= 1) {
@@ -1018,7 +1043,9 @@
         const pby = Math.floor(player.y / TILE);
         for (let dy = 0; dy <= 1; dy++) {
           for (let dx = 0; dx <= 1; dx++) {
-            if (world[pby + dy] && (world[pby + dy][pbx + dx] === 'fire' || fireParticles.some(f => Math.abs(f.x - player.x) < 30 && Math.abs(f.y - player.y) < 30))) {
+            const x = pbx + dx;
+            const y = pby + dy;
+            if (x >= 0 && x < WORLD_W && y >= 0 && y < WORLD_H && (world[y][x] === 'fire' || fireParticles.some(f => Math.abs(f.x - player.x) < 30 && Math.abs(f.y - player.y) < 30))) {
               player.health = Math.max(0, player.health - 3);
               break;
             }
@@ -1068,10 +1095,10 @@
       ctx.translate(-Math.floor(camera.x), -Math.floor(camera.y));
       drawWorld(day);
       drawBoss(day);
-      drawBees(day);
       drawMobs(day);
-      drawParticles();
+      drawBees(day);
       drawBullets();
+      drawParticles();
       drawPlayer();
       drawTarget();
       ctx.restore();
@@ -1384,13 +1411,14 @@
     function doShoot() {
       if (shootCooldown > 0) return;
       const hasPick = inventory.wood_pickaxe > 0;
-      const range = hasPick ? 15 : 10;
       const dmg = hasPick ? 10 : 5;
       const speed = hasPick ? 450 : 300;
       const cx = player.x + player.w / 2;
       const cy = player.y + player.h / 2;
-      const mx = mouse.x + camera.x - cx;
-      const my = mouse.y + camera.y - cy;
+      const targetX = mouse.x + camera.x;
+      const targetY = mouse.y + camera.y;
+      const mx = targetX - cx;
+      const my = targetY - cy;
       const len = Math.max(1, Math.hypot(mx, my));
       shootCooldown = hasPick ? 0.3 : 0.5;
       playerBullets.push({ x: cx, y: cy, vx: mx / len * speed, vy: my / len * speed, dmg, life: 1.2, color: hasPick ? '#f0d060' : '#aaa' });
@@ -1413,7 +1441,7 @@
       autoSaveTimer += dt;
       if (autoSaveTimer >= 30) {
         autoSaveTimer = 0;
-        localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
+        saveState();
       }
       requestAnimationFrame(loop);
     }
@@ -1508,13 +1536,13 @@
 
     // 页面关闭/刷新时自动保存
     window.addEventListener('beforeunload', () => {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
+      saveState();
     });
 
     // 可见性变化时保存（切换标签页时）
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) {
-        localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss }));
+        saveState();
       }
     });
 
@@ -1532,10 +1560,7 @@
     if (savedData) {
       try {
         const data = JSON.parse(savedData);
-        world = data.world;
-        Object.assign(inventory, data.inventory);
-        Object.assign(player, data.player, { vx: 0, vy: 0 });
-        time = data.time || 0.18;
+        loadState(data);
         camera.x = player.x - innerWidth / 2;
         camera.y = player.y - innerHeight / 2;
         showMessage('存档已读取。');

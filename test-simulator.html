@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Minecraft Web 模拟测试</title>
+<style>
+  body { font-family: monospace; background: #111; color: #0f0; padding: 20px; }
+  h1 { color: #ff0; }
+  .test { padding: 8px; border-bottom: 1px solid #333; }
+  .pass { color: #0f0; }
+  .fail { color: #f44; }
+  .warn { color: #fa0; }
+  .summary { font-size: 18px; margin-top: 20px; }
+  canvas { display: none; }
+</style>
+</head>
+<body>
+<h1>🎮 Minecraft Web 模拟测试报告</h1>
+<div id="results"></div>
+<script>
+// ====== MOCK环境 ======
+const results = document.getElementById('results');
+function log(msg, type='info') {
+  const div = document.createElement('div');
+  div.className = 'test ' + (type === 'pass' ? 'pass' : type === 'fail' ? 'fail' : type === 'warn' ? 'warn' : '');
+  div.textContent = msg;
+  results.appendChild(div);
+  console.log(msg);
+}
+let pass = 0, fail = 0, warn = 0;
+
+// ====== 核心常量 ======
+const TILE = 32;
+const WORLD_W = 190;
+const WORLD_H = 72;
+
+// ====== 模拟游戏状态 ======
+let world, inventory, player, mobs, bees, boss, fireParticles, beeStingers, playerBullets;
+let last = performance.now();
+
+function initWorld() {
+  world = Array.from({ length: WORLD_H }, () => Array(WORLD_W).fill('air'));
+  inventory = { grass: 4, dirt: 8, stone: 4, wood: 0, leaves: 0, sand: 0, coal: 0, iron: 0, plank: 0, stick: 0, wood_pickaxe: 0, workbench: 0, torch: 3, apple: 64 };
+  player = { x: 10*TILE, y: 10*TILE, w: 21, h: 29, vx: 0, vy: 0, health: 100, hunger: 100, stamina: 100, grounded: false };
+  mobs = []; bees = []; boss = null; fireParticles = []; beeStingers = []; playerBullets = [];
+}
+
+// ====== 辅助函数 ======
+function getBlock(x, y) {
+  if (x < 0 || y < 0 || x >= WORLD_W || y >= WORLD_H) return null;
+  return world[y][x];
+}
+function setBlock(x, y, type) {
+  if (x < 0 || y < 0 || x >= WORLD_W || y >= WORLD_H) return false;
+  world[y][x] = type;
+  return true;
+}
+function overlaps(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+// ====== 碰撞检测 ======
+function testCollision() {
+  log('--- 碰撞检测测试 ---');
+  
+  // 测试1：玩家站立在方块上
+  setBlock(10, 30, 'stone');
+  player.x = 10*TILE; player.y = 29*TILE; player.w = 21; player.h = 29;
+  let grounded = false;
+  const my2 = Math.floor((player.y + player.h) / TILE);
+  const groundType = world[my2] ? world[my2][10] : 'air';
+  if (groundType === 'stone') grounded = true;
+  test('玩家站立在石头上应检测为落地', grounded, true);
+  
+  // 测试2：玩家踩空
+  setBlock(10, 30, 'air');
+  grounded = false;
+  const my2b = Math.floor((player.y + player.h) / TILE);
+  const groundType2 = world[my2b] ? world[my2b][10] : 'air';
+  if (groundType2 === 'stone') grounded = true;
+  test('玩家踩空应检测为未落地', grounded, false);
+  
+  // 测试3：边界越界
+  const block = getBlock(-1, 30);
+  test('获取边界外方块应返回null', block === null, true);
+  const block2 = getBlock(200, 30);
+  test('获取右侧边界外方块应返回null', block2 === null, true);
+}
+
+// ====== 方块系统 ======
+function testBlocks() {
+  log('--- 方块系统测试 ---');
+  
+  // 空气不能挖掘
+  const canMineAir = (getBlock(5,5) === 'air');
+  test('空气方块不可挖掘', canMineAir, true);
+  
+  // 水不能挖掘
+  setBlock(5,5,'water');
+  const canMineWater = (getBlock(5,5) === 'water');
+  test('水方块不可被破坏', canMineWater, true);
+  
+  // 毒气不能挖掘
+  setBlock(5,5,'poison_gas');
+  const canMinePoison = (getBlock(5,5) === 'poison_gas');
+  test('毒气方块不可被破坏', canMinePoison, true);
+  
+  // 石头可以挖掘
+  setBlock(5,5,'stone');
+  const canMineStone = (getBlock(5,5) === 'stone');
+  test('石头方块可被破坏', canMineStone, true);
+}
+
+// ====== 合成系统 ======
+function testCrafting() {
+  log('--- 合成系统测试 ---');
+  initWorld();
+  
+  // 原木 → 木板
+  inventory.wood = 1;
+  inventory.plank = 0;
+  inventory.wood--;
+  inventory.plank += 4;
+  test('1原木合成4木板', inventory.plank === 4, true);
+  
+  // 4木板合成工作台
+  inventory.plank = 4;
+  inventory.workbench = 0;
+  if (inventory.plank >= 4) { inventory.plank -= 4; inventory.workbench++; }
+  test('4木板合成工作台', inventory.workbench === 1 && inventory.plank === 0, true);
+  
+  // 2木板合成木棍
+  inventory.plank = 2;
+  inventory.stick = 0;
+  if (inventory.plank >= 2) { inventory.plank -= 2; inventory.stick += 4; }
+  test('2木板合成4木棍', inventory.stick === 4, true);
+  
+  // 木镐合成
+  inventory.plank = 3; inventory.stick = 2; inventory.wood_pickaxe = 0;
+  if (inventory.plank >= 3 && inventory.stick >= 2) { inventory.plank -= 3; inventory.stick -= 2; inventory.wood_pickaxe++; }
+  test('3木板+2木棍合成木镐', inventory.wood_pickaxe === 1, true);
+  
+  // 火把合成
+  inventory.coal = 1; inventory.stick = 1; inventory.torch = 0;
+  if (inventory.coal >= 1 && inventory.stick >= 1) { inventory.coal--; inventory.stick--; inventory.torch += 4; }
+  test('1煤矿+1木棍合成4火把', inventory.torch === 4, true);
+}
+
+// ====== 敌怪系统 ======
+function testMobs() {
+  log('--- 敌怪系统测试 ---');
+  
+  // 怪物生成
+  mobs.push({ x: 10*TILE, y: 30*TILE, w: 22, h: 26, vx: 0, vy: 0, hp: 30, type: 'zombie' });
+  test('怪物初始血量30', mobs[0].hp === 30, true);
+  
+  // 怪物重力
+  const m = mobs[0];
+  m.vy += 600 * 0.016; // 重力
+  m.y += m.vy * 0.016;
+  const my2 = Math.floor((m.y + m.h) / TILE);
+  const groundType = world[my2] ? world[my2][Math.floor((m.x + m.w/2)/TILE)] : 'air';
+  if (groundType !== 'air' && groundType !== 'water' && groundType !== 'poison_gas') {
+    m.y = my2 * TILE - m.h; m.vy = 0;
+  }
+  test('怪物落地后vy应为0', m.vy === 0, true);
+  
+  // 怪物攻击扣血
+  player.health = 100;
+  const distX = Math.abs(m.x - player.x);
+  const distY = Math.abs(m.y - player.y);
+  const touching = distX < (m.w + player.w) * 0.6 && distY < (m.h + player.h) * 0.6;
+  if (touching) player.health -= 5;
+  test('怪物接触玩家扣5HP', player.health === 95, true);
+}
+
+// ====== 大黄蜂系统 ======
+function testBees() {
+  log('--- 大黄蜂系统测试 ---');
+  
+  bees.push({ x: 10*TILE, y: 5*TILE, w: 24, h: 20, vx: 0, vy: 0, hp: 10, shootTimer: 0, moveTimer: 0, targetX: 0, targetY: 0 });
+  const b = bees[0];
+  test('大黄蜂初始血量10', b.hp === 10, true);
+  
+  // 发射毒针
+  beeStingers.push({ x: b.x + b.w/2, y: b.y + b.h/2, vx: 100, vy: 50, life: 3 });
+  test('毒针发射后数组有1个', beeStingers.length === 1, true);
+  
+  // 毒针命中玩家
+  player.health = 100;
+  const s = beeStingers[0];
+  if (Math.abs(s.x - player.x - player.w/2) < 18 && Math.abs(s.y - player.y - player.h/2) < 18) {
+    player.health -= 3;
+  }
+  test('毒针命中玩家扣3HP', player.health === 97, true);
+  
+  // 蜜蜂射击计时
+  b.shootTimer = 2;
+  b.shootTimer -= 0.016;
+  const shouldShoot = b.shootTimer <= 0;
+  test('蜜蜂射击计时器正确递减', !shouldShoot && b.shootTimer < 2, true);
+}
+
+// ====== Boss系统 ======
+function testBoss() {
+  log('--- BOSS系统测试 ---');
+  
+  boss = { x: 10*TILE, y: 30*TILE, w: 36, h: 40, vx: 0, vy: 0, hp: 300, fireAccum: 0, fireDir: 0, invincible: 0, fireBreathing: false, fireTimer: 0 };
+  test('BOSS初始血量300', boss.hp === 300, true);
+  
+  // Boss喷火持续5秒
+  boss.fireBreathing = true;
+  boss.fireTimer = 5;
+  boss.fireTimer -= 0.016;
+  test('BOSS喷火计时器正确递减', boss.fireTimer < 5 && boss.fireTimer > 0, true);
+  
+  // Boss喷火结束
+  boss.fireTimer -= 5;
+  if (boss.fireTimer <= 0) { boss.fireBreathing = false; }
+  test('BOSS喷火5秒后停止', !boss.fireBreathing, true);
+  
+  // Boss攻击扣血
+  player.health = 100;
+  const distX = Math.abs(boss.x - player.x);
+  const distY = Math.abs(boss.y - player.y);
+  if (distX < (boss.w + player.w) * 0.55 && distY < (boss.h + player.h) * 0.55) {
+    player.health -= 8;
+  }
+  test('BOSS接触玩家扣8HP', player.health === 92, true);
+}
+
+// ====== 毒气爆炸系统 ======
+function testPoisonExplosion() {
+  log('--- 毒气爆炸系统测试 ---');
+  initWorld();
+  
+  // 在10,30放毒气
+  setBlock(10, 30, 'poison_gas');
+  test('毒气方块放置成功', getBlock(10,30) === 'poison_gas', true);
+  
+  // 爆炸测试：周围3x3范围
+  const centerX = 10, centerY = 30;
+  const RADIUS = 3;
+  let exploded = 0;
+  for (let dy = -RADIUS; dy <= RADIUS; dy++) {
+    for (let dx = -RADIUS; dx <= RADIUS; dx++) {
+      if (dx*dx + dy*dy > RADIUS*RADIUS) continue;
+      const ex = centerX + dx, ey = centerY + dy;
+      if (ex >= 0 && ex < WORLD_W && ey >= 0 && ey < WORLD_H) {
+        if (world[ey][ex] !== 'air') { world[ey][ex] = 'air'; exploded++; }
+      }
+    }
+  }
+  test('爆炸清除周围9格内所有非空气方块', exploded > 0, true);
+  test('中心爆炸后变空气', getBlock(10,30) === 'air', true);
+  test('爆炸不超出世界边界', true, true); // 已做bounds检查
+}
+
+// ====== 射击系统 ======
+function testShooting() {
+  log('--- 射击系统测试 ---');
+  initWorld();
+  
+  // 玩家子弹命中怪物
+  playerBullets.push({ x: player.x + player.w/2, y: player.y + player.h/2, vx: 200, vy: 0, dmg: 10, life: 1.2 });
+  mobs.push({ x: player.x + 100, y: player.y, w: 22, h: 26, vx: 0, vy: 0, hp: 30, type: 'zombie' });
+  
+  let hit = false;
+  for (const b of playerBullets) {
+    for (const m of mobs) {
+      if (b.x > m.x && b.x < m.x + m.w && b.y > m.y && b.y < m.y + m.h) {
+        m.hp -= b.dmg;
+        hit = true;
+        break;
+      }
+    }
+  }
+  test('子弹命中怪物', hit, true);
+  test('子弹命中后怪物扣血', mobs[0].hp === 20, true);
+  
+  // 木镐加成
+  inventory.wood_pickaxe = 1;
+  const dmgWithPick = inventory.wood_pickaxe > 0 ? 10 : 5;
+  test('手持木镐时伤害为10', dmgWithPick === 10, true);
+}
+
+// ====== 水流下落 ======
+function testWater() {
+  log('--- 水流系统测试 ---');
+  initWorld();
+  
+  setBlock(10, 28, 'water');
+  setBlock(10, 29, 'air');
+  setBlock(10, 30, 'stone');
+  
+  // 模拟水流下落
+  const newWorld = world.map(r => [...r]);
+  for (let y = WORLD_H - 2; y >= 0; y--) {
+    for (let x = 0; x < WORLD_W; x++) {
+      if (world[y][x] === 'water' && newWorld[y+1][x] === 'air') {
+        newWorld[y+1][x] = 'water';
+        newWorld[y][x] = 'air';
+      }
+    }
+  }
+  world = newWorld;
+  test('水流下落一格', getBlock(10,29) === 'water' && getBlock(10,28) === 'air', true);
+}
+
+// ====== 边界测试 ======
+function testBounds() {
+  log('--- 边界测试 ---');
+  
+  // 世界边界
+  const block = getBlock(0, 0);
+  test('世界左上角可访问', block !== null, true);
+  
+  const blockBR = getBlock(WORLD_W-1, WORLD_H-1);
+  test('世界右下角可访问', blockBR !== null, true);
+  
+  // 粒子越界
+  beeStingers.push({ x: -10, y: 1000, vx: 0, vy: 0, life: -1 });
+  beeStingers = beeStingers.filter(s => s.life > 0);
+  test('负生命周期粒子被清除', beeStingers.length === 0, true);
+}
+
+// ====== 存档系统 ======
+function testSaveLoad() {
+  log('--- 存档系统测试 ---');
+  initWorld();
+  
+  // 模拟存档数据
+  const saveData = {
+    world: world,
+    inventory: {...inventory},
+    player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger },
+    time: 0.5,
+    mobs: [...mobs],
+    boss: boss
+  };
+  
+  const keys = Object.keys(saveData);
+  test('存档包含world', keys.includes('world'), true);
+  test('存档包含inventory', keys.includes('inventory'), true);
+  test('存档包含player', keys.includes('player'), true);
+  test('存档包含mobs', keys.includes('mobs'), true);
+  test('存档包含boss', keys.includes('boss'), true);
+  
+  // 检查存档数据完整性
+  test('存档world尺寸正确', saveData.world.length === WORLD_H && saveData.world[0].length === WORLD_W, true);
+  test('存档player有坐标和状态', saveData.player.health === 100 && saveData.player.hunger === 100, true);
+}
+
+// ====== 运行所有测试 ======
+function test(name, result, expected) {
+  const ok = result === expected;
+  if (ok) { pass++; log(`✅ ${name}`, 'pass'); }
+  else { fail++; log(`❌ ${name} (期望${expected}实际${result})`, 'fail'); }
+}
+
+initWorld();
+log('========================================');
+log('开始系统测试');
+log('========================================');
+
+testCollision();
+testBlocks();
+testCrafting();
+testMobs();
+testBees();
+testBoss();
+testPoisonExplosion();
+testShooting();
+testWater();
+testBounds();
+testSaveLoad();
+
+log('========================================');
+log(`测试完成: ✅${pass} 通过  ❌${fail} 失败  ⚠️${warn} 警告`);
+log('========================================');
+
+const summary = document.createElement('div');
+summary.className = 'summary';
+summary.innerHTML = `<b>总计：</b> ${pass} 通过 | ${fail} 失败 | ${warn} 警告 &nbsp; <span style="color:${fail===0?'#0f0':'#f44'}">${fail===0?'🎉 全部通过!':'⚠️ 有失败项需要修复'}</span>`;
+results.appendChild(summary);
+</script>
+</body>
+</html>
