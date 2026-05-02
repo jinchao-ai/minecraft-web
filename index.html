@@ -394,6 +394,15 @@
       return a + (b - a) * t;
     }
 
+    // 一键清空所有毒气
+    (function clearPoisonGas() {
+      let count = 0;
+      for (let y = 0; y < WORLD_H; y++)
+        for (let x = 0; x < WORLD_W; x++)
+          if (world[y][x] === 'poison_gas') { world[y][x] = 'air'; count++; }
+      console.log('清空毒气 ' + count + ' 块');
+    })();
+
     function generateWorld(fresh = false) {
       world = Array.from({ length: WORLD_H }, () => Array(WORLD_W).fill('air'));
       for (let x = 0; x < WORLD_W; x++) {
