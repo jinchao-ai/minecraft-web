@@ -2,8 +2,11 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Minecraft Web 平衡版</title>
+  <title>Minecraft Web 平衡版 v1777778801</title>
   <style>
     :root {
       --ink: #f6efd8;
@@ -298,6 +301,8 @@
   </div>
 
   <script>
+    // 版本号用于强制刷新
+    const GAME_VERSION = 1777778801;
     const canvas = document.getElementById('game');
     const ctx = canvas.getContext('2d');
     const TILE = 32;
