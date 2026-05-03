@@ -443,15 +443,16 @@
       world[y][x] = type;
     }
 
-    function mineBlock(tx, ty, dt) {
+    function mineBlock(tx, ty) {
       const type = getBlock(tx, ty);
       if (type === 'air' || type === 'water' || type === 'poison_gas') return false;
+      const block = BLOCKS[type];
       const same = mineTarget && mineTarget.x === tx && mineTarget.y === ty;
       if (!same) { mineTarget = { x: tx, y: ty }; mineProgress = 0; }
-      const block = BLOCKS[type];
       const toolBonus = inventory.wood_pickaxe > 0 && ['stone', 'coal', 'iron'].includes(type) ? 1.45 : 1;
-      mineProgress += dt * toolBonus * (player.stamina > 8 ? 1 : 0.55);
-      player.stamina = Math.max(0, player.stamina - dt * 2.3);
+      const staminaBonus = player.stamina > 8 ? 1 : 0.55;
+      // 每点击一次 = 0.5秒蓄力，每次点击加上 hardness * 0.2 的进度
+      mineProgress += 0.5 * toolBonus * staminaBonus * block.hardness * 0.4;
       if (mineProgress >= block.hardness) {
         setBlock(tx, ty, 'air');
         inventory[type] = (inventory[type] || 0) + 1;
@@ -815,7 +816,7 @@
       if (player.hunger <= 0) player.health = Math.max(0, player.health - dt * 3.5);
       if (player.hunger > 70 && player.health < 100) player.health = Math.min(100, player.health + dt * 1.2);
       if (player.y > WORLD_H * TILE + 200 || player.health <= 0) resetPlayer(true);
-      if (mouse.down) mineAtPointer(dt);
+      // 挖掘现在由点击触发（见 pointerdown 事件），此处不再自动挖掘
       particles = particles.filter(p => {
         p.life -= dt; p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 260 * dt; return p.life > 0;
       });
@@ -1049,9 +1050,9 @@
       return { x: Math.floor((playerCx + dx / len * reach) / TILE), y: Math.floor((playerCy + dy / len * reach) / TILE) };
     }
 
-    function mineAtPointer(dt) {
+    function mineAtPointer() {
       const t = targetFromPointer();
-      mineBlock(t.x, t.y, dt);
+      mineBlock(t.x, t.y);
     }
 
     function updateCamera() {
@@ -1457,7 +1458,8 @@
         }
         if (!hit) placeBlock(targetFromPointer().x, targetFromPointer().y);
       } else {
-        mouse.down = true;
+        // 单击触发挖掘（针对准心处的方块）
+        mineAtPointer();
       }
     });
     window.addEventListener('pointerup', () => { mouse.down = false; mineProgress = 0; mineTarget = null; });
