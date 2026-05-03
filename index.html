@@ -304,6 +304,9 @@
     const WORLD_W = 190;
     const WORLD_H = 72;
     const SAVE_KEY = 'balanced-minecraft-web-save-v1';
+    // ===== 功能开关 =====
+    const ENABLE_BOSS = false;   // BOSS系统开关（默认关闭）
+    const ENABLE_POISON_GAS = true; // 毒气系统开关
 
     const BLOCKS = {
       air: { emoji: '', color: 'transparent', solid: false, hardness: 0, name: '空气' },
@@ -345,10 +348,7 @@
     let mobs = [];
     let mobSpawnAccum = 0;
     let mobDmgAccum = 0;
-    let boss = null;
-    let bossFireballs = [];
-    let fireParticles = [];
-    let bossSpawnAccum = 0;
+
     let bees = [];
     let beeStingers = [];
     let beeSpawnAccum = 0;
@@ -584,7 +584,7 @@
     }
 
     function saveState() {
-      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, boss, bees, fireParticles, playerBullets, beeStingers }));
+      localStorage.setItem(SAVE_KEY, JSON.stringify({ world, inventory, player: { x: player.x, y: player.y, health: player.health, hunger: player.hunger }, time, mobs, bees, playerBullets, beeStingers }));
     }
 
     function loadState(data) {
@@ -593,9 +593,7 @@
       Object.assign(player, data.player, { vx: 0, vy: 0 });
       time = data.time || 0.2;
       mobs = data.mobs || [];
-      boss = data.boss || null;
       bees = data.bees || [];
-      fireParticles = data.fireParticles || [];
       playerBullets = data.playerBullets || [];
       beeStingers = data.beeStingers || [];
     }
@@ -1013,171 +1011,7 @@
             break;
           }
         }
-        // 击中Boss
-        if (boss && b.x > boss.x && b.x < boss.x + boss.w && b.y > boss.y && b.y < boss.y + boss.h && boss.invincible <= 0) {
-          boss.hp -= b.dmg;
-          boss.invincible = 0.2;
-          playerBullets.splice(i, 1);
-          if (boss.hp <= 0) { boss = null; showMessage('🏆 BOSS击杀！'); }
-        }
-      }
-      // Boss生成（开局立即出现在地下第10层）
-      if (!boss) {
-        const bx = Math.floor(1 + Math.random() * (WORLD_W - 2));
-        const by = 40; // 地下十层（放在y=40，自由落体到y=38的地面站稳）
-        boss = { x: bx * TILE, y: by * TILE, w: 36, h: 40, vx: 0, vy: 0, hp: 300, fireAccum: 0, fireDir: 0, invincible: 0, wanderTimer: 0, wanderTarget: { x: bx * TILE, y: 40 * TILE }, chasing: false };
-        showMessage('💀 BOSS出现！');
-      }
-      // Boss行为
-      if (boss) {
-        boss.invincible = Math.max(0, boss.invincible - dt);
-        const dx = player.x - boss.x;
-        const dy = player.y - boss.y;
-        const dist = Math.hypot(dx, dy);
-        const playerUnderground = Math.floor(player.y / TILE) > 30;
-        // 玩家在地下且距离<20格则追击，否则原地随机活动
-        if (playerUnderground && dist < TILE * 20) {
-          boss.chasing = true;
-          boss.wanderTimer = 3;
-        } else {
-          boss.chasing = false;
-        }
-        if (boss.chasing) {
-          // 追击玩家
-          if (dist > 80) {
-            boss.vx += Math.sign(dx) * 220 * dt;
-            boss.vx *= 0.88;
-            boss.x += boss.vx * dt;
-          }
-        } else {
-          // 原地随机活动（每1-3秒换个方向）
-          boss.wanderTimer -= dt;
-          if (boss.wanderTimer <= 0) {
-            boss.wanderTimer = 1 + Math.random() * 3;
-            const rx = Math.floor(1 + Math.random() * (WORLD_W - 2));
-            const ry = Math.floor(36 + Math.random() * 20); // 地下36-55层范围活动
-            boss.wanderTarget = { x: rx * TILE, y: ry * TILE };
-          }
-          const wdx = boss.wanderTarget.x - boss.x;
-          const wdy = boss.wanderTarget.y - boss.y;
-          boss.vx += Math.sign(wdx) * 80 * dt;
-          boss.vy += Math.sign(wdy) * 80 * dt;
-          boss.vx *= 0.85;
-          boss.vy *= 0.85;
-          boss.x += boss.vx * dt;
-        }
-        // 重力
-        boss.vy += 600 * dt;
-        boss.vy = Math.min(boss.vy, 400);
-        boss.y += boss.vy * dt;
-        // 四周碰撞
-        const bmy1 = Math.floor(boss.y / TILE);
-        const bmy2 = Math.floor((boss.y + boss.h) / TILE);
-        const bmx1 = Math.floor((boss.x + 6) / TILE);
-        const bmx2 = Math.floor((boss.x + boss.w - 6) / TILE);
-        const ground = (by) => world[by] && world[by][bmx1] && !['air','water','poison_gas','fire'].includes(world[by][bmx1]);
-        const ceilBlk = (by) => world[by] && world[by][bmx1] && !['air','water','poison_gas','fire'].includes(world[by][bmx1]);
-        const leftBlk = (bx) => world[bmy2] && world[bmy2][bx] && !['air','water','poison_gas','fire'].includes(world[bmy2][bx]);
-        const rightBlk = (bx) => world[bmy2] && world[bmy2][bx] && !['air','water','poison_gas','fire'].includes(world[bmy2][bx]);
-        // 地面
-        if (bmy2 >= 0 && bmy2 < WORLD_H && bmx1 >= 0 && bmx1 < WORLD_W && ground(bmy2)) {
-          boss.y = bmy2 * TILE - boss.h; boss.vy = 0;
-        }
-        // 天花板
-        if (bmy1 >= 0 && bmy1 < WORLD_H && bmx1 >= 0 && bmx1 < WORLD_W && ceilBlk(bmy1)) {
-          boss.y = (bmy1 + 1) * TILE; boss.vy = Math.max(0, boss.vy);
-        }
-        // 左墙
-        if (bmx1 >= 0 && bmx1 < WORLD_W && bmy2 >= 0 && bmy2 < WORLD_H && leftBlk(bmx1)) {
-          boss.x = (bmx1 + 1) * TILE - 6; boss.vx = 0;
-        }
-        // 右墙
-        if (bmx2 >= 0 && bmx2 < WORLD_W && bmy2 >= 0 && bmy2 < WORLD_H && rightBlk(bmx2)) {
-          boss.x = bmx2 * TILE - boss.w + 6; boss.vx = 0;
-        }
-        boss.x = Math.max(0, Math.min(WORLD_W * TILE - boss.w, boss.x));
-        // 喷火（持续5秒，每0.25秒喷射一次，共20格）
-        boss.fireAccum += dt;
-        if (boss.fireAccum >= 2.5 && !boss.fireBreathing) {
-          boss.fireBreathing = true;
-          boss.fireTimer = 5;
-          boss.fireDir = dx > 0 ? 1 : -1;
-          showMessage('🔥 BOSS开始喷火！');
-        }
-        if (boss.fireBreathing) {
-          boss.fireTimer -= dt;
-          if (boss.fireTimer <= 0) {
-            boss.fireBreathing = false;
-            boss.fireAccum = 0;
-          } else {
-            const bx = Math.floor((boss.x + boss.w / 2) / TILE);
-            const by = Math.floor((boss.y + boss.h / 2) / TILE);
-            const dir = boss.fireDir;
-            // 每0.25秒沿水平方向喷射一格火焰
-            if (Math.floor(boss.fireTimer * 4) !== Math.floor((boss.fireTimer + dt) * 4)) {
-              for (let i = 1; i <= 20; i++) {
-                const fx = bx + dir * i;
-                const fy = by + Math.floor(Math.random() * 3) - 1;
-                if (fx < 0 || fx >= WORLD_W || fy < 0 || fy >= WORLD_H) break;
-                const bt = world[fy][fx];
-                if (bt === 'poison_gas') {
-                  // 毒气爆炸：周围3格全部清除
-                  world[fy][fx] = 'air';
-                  for (let dy = -3; dy <= 3; dy++) {
-                    for (let dx2 = -3; dx2 <= 3; dx2++) {
-                      if (dx2 * dx2 + dy * dy > 9) continue;
-                      const ex = fx + dx2, ey = fy + dy;
-                      if (ex >= 0 && ex < WORLD_W && ey >= 0 && ey < WORLD_H && world[ey][ex] !== 'air') {
-                        world[ey][ex] = 'air';
-                      }
-                    }
-                  }
-                  // 爆炸粒子
-                  for (let k = 0; k < 20; k++) {
-                    const angle = Math.random() * Math.PI * 2;
-                    const spd = 50 + Math.random() * 150;
-                    fireParticles.push({ x: fx * TILE + TILE / 2, y: fy * TILE + TILE / 2, life: 0.8, vx: Math.cos(angle) * spd, vy: Math.sin(angle) * spd - 50, color: '#88ff44' });
-                  }
-                  showMessage('💥 火焰引爆毒气！');
-                  break;
-                }
-                if (bt !== 'air' && bt !== 'fire' && bt !== 'water') {
-                  world[fy][fx] = 'air';
-                  break;
-                }
-              }
-              // 火焰粒子
-              for (let i = 1; i <= 20; i++) {
-                const px = (bx + dir * i) * TILE + TILE / 2;
-                const py = by * TILE + TILE / 2;
-                fireParticles.push({ x: px, y: py, life: 0.6 + Math.random() * 0.4, vx: dir * (100 + Math.random() * 50) + (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 80, color: '#ff6600' });
-              }
-            }
-          }
-        }
-        // Boss接触玩家扣血
-        if (mobDmgAccum >= 1) {
-          if (Math.abs(boss.x - player.x) < (boss.w + player.w) * 0.55 && Math.abs(boss.y - player.y) < (boss.h + player.h) * 0.55) {
-            player.health = Math.max(0, player.health - 8);
-            if (Math.random() < 0.15) showMessage('💀 BOSS攻击！');
-          }
-        }
-        // Boss被击杀
-        if (boss.hp <= 0) {
-          showMessage('🏆 BOSS击杀！');
-          boss = null;
-        }
-      }
-      // 火焰粒子更新
-      for (let i = fireParticles.length - 1; i >= 0; i--) {
-        const p = fireParticles[i];
-        p.vx ||= 0;
-        p.vy ||= 0;
-        p.life -= dt;
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-        p.vy += 30 * dt;
-        if (p.life <= 0) fireParticles.splice(i, 1);
+
       }
       // 玩家接触火焰扣血
       if (mobDmgAccum >= 1) {
@@ -1187,7 +1021,7 @@
           for (let dx = 0; dx <= 1; dx++) {
             const x = pbx + dx;
             const y = pby + dy;
-            if (x >= 0 && x < WORLD_W && y >= 0 && y < WORLD_H && (world[y][x] === 'fire' || fireParticles.some(f => Math.abs(f.x - player.x) < 30 && Math.abs(f.y - player.y) < 30))) {
+            if (x >= 0 && x < WORLD_W && y >= 0 && y < WORLD_H && world[y][x] === 'fire') {
               player.health = Math.max(0, player.health - 3);
               break;
             }
@@ -1236,7 +1070,6 @@
       ctx.save();
       ctx.translate(-Math.floor(camera.x), -Math.floor(camera.y));
       drawWorld(day);
-      drawBoss(day);
       drawMobs(day);
       drawBees(day);
       drawBullets();
@@ -1367,48 +1200,6 @@
       return `rgba(${r},${g},${b},${alpha})`;
     }
 
-    function drawBoss(day) {
-      if (!boss) return;
-      const sx = boss.x - camera.x;
-      const sy = boss.y - camera.y;
-      if (sx < -100 || sx > canvas.width + 100 || sy < -100 || sy > canvas.height + 100) return;
-      ctx.save();
-      // 身体
-      ctx.fillStyle = '#8b0000';
-      ctx.fillRect(sx, sy + 8, boss.w, boss.h - 8);
-      // 头
-      ctx.fillStyle = '#cc1111';
-      ctx.fillRect(sx + 4, sy, boss.w - 8, 18);
-      // 角
-      ctx.fillStyle = '#333';
-      ctx.fillRect(sx + 4, sy - 8, 6, 10);
-      ctx.fillRect(sx + boss.w - 10, sy - 8, 6, 10);
-      // 眼睛
-      ctx.fillStyle = '#ffff00';
-      ctx.fillRect(sx + 10, sy + 6, 6, 6);
-      ctx.fillRect(sx + boss.w - 16, sy + 6, 6, 6);
-      // 血条背景
-      ctx.fillStyle = '#333';
-      ctx.fillRect(sx - 2, sy - 18, boss.w + 4, 8);
-      // 血条
-      ctx.fillStyle = '#ff0000';
-      ctx.fillRect(sx, sy - 16, boss.w * (boss.hp / 300), 4);
-      ctx.restore();
-      // 火焰粒子
-      for (const f of fireParticles) {
-        const fsx = f.x - camera.x;
-        const fsy = f.y - camera.y;
-        if (f.color) {
-          ctx.fillStyle = f.color.startsWith('#') ? hexToRgba(f.color, f.life) : f.color;
-        } else {
-          ctx.fillStyle = `rgba(255,${Math.floor(100 + Math.random() * 100)},0,${f.life})`;
-        }
-        ctx.beginPath();
-        ctx.arc(fsx, fsy, 4 + f.life * 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-
     function drawMobs(day) {
       for (const m of mobs) {
         const sx = m.x - camera.x;
@@ -1521,7 +1312,6 @@
       const hour = Math.floor(time * 24);
       const px = Math.floor(player.x / TILE), py = Math.floor(player.y / TILE);
       let info = `坐标 ${px}, ${py} · ${String(hour).padStart(2, '0')}:00`;
-      if (boss) info += ' 💀BOSS';
       if (bees.length > 0) info += ` 🐝×${bees.length}`;
       if (mobs.length > 0) info += ` 🧟×${mobs.length}`;
       document.getElementById('worldInfo').textContent = info;
@@ -1630,14 +1420,6 @@
         const cx = mouse.x + camera.x;
         const cy = mouse.y + camera.y;
         let hit = false;
-        // 优先攻击Boss
-        if (boss && cx >= boss.x && cx <= boss.x + boss.w && cy >= boss.y && cy <= boss.y + boss.h && boss.invincible <= 0) {
-          const dmg = inventory.wood_pickaxe > 0 ? 18 : 9;
-          boss.hp -= dmg;
-          boss.invincible = 0.3;
-          showMessage('🔥 攻击BOSS！-' + dmg + ' HP:' + boss.hp + '/300');
-          hit = true;
-        }
         // 攻击普通怪物
         if (!hit) {
           for (let i = mobs.length - 1; i >= 0; i--) {
