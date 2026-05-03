@@ -342,7 +342,6 @@
     let mineTarget = null;
     let messageTimer = 0;
     let waterTickAccum = 0;
-    let poisonTickAccum = 0;
     let mobs = [];
     let mobSpawnAccum = 0;
     let mobDmgAccum = 0;
@@ -353,8 +352,8 @@
     let bees = [];
     let beeStingers = [];
     let beeSpawnAccum = 0;
-    let playerBullets = [];
-    let shootCooldown = 0;
+    let poisonGasClusters = []; // 毒气cluster: [{id, blocks: [{x,y}], frontier: [{x,y}]}]
+    let poisonRespawnTriggered = false; // 本次重生是否已触发毒气生成
 
     const player = {
       x: spawn.x, y: spawn.y, w: 21, h: 29, vx: 0, vy: 0,
@@ -459,6 +458,15 @@
         showMessage(msg);
         mineProgress = 0;
         mineTarget = null;
+        // 毒气蔓延触发：当玩家挖开一个新空气方块时
+        for (const cluster of poisonGasClusters) {
+          const matchingFrontier = cluster.frontier.find(f => f.x === tx && f.y === ty);
+          if (matchingFrontier && cluster.blocks.length < 12) {
+            cluster.blocks.push({ x: tx, y: ty });
+            world[ty][tx] = 'poison_gas';
+            cluster.frontier = findFrontier(cluster.blocks);
+          }
+        }
         return true;
       }
       return false;
@@ -609,7 +617,129 @@
       player.health = full ? 100 : player.health;
       player.hunger = full ? 100 : player.hunger;
       player.stamina = 100;
-      showMessage('已在出生点重生。');
+      player.sleepTimer = 0;
+      // 清空所有毒气
+      if (full) {
+        for (let y = 0; y < WORLD_H; y++) {
+          for (let x = 0; x < WORLD_W; x++) {
+            if (world[y][x] === 'poison_gas') world[y][x] = 'air';
+          }
+        }
+        poisonGasClusters = [];
+        poisonRespawnTriggered = false;
+        setTimeout(() => { if (gameState === 'playing') spawnPoisonGasOnRespawn(); }, 500);
+      }
+      showMessage('已在出生点重生 ☠️');
+    }
+
+    // ── 毒气系统 ──
+    function spawnPoisonGasOnRespawn() {
+      if (poisonRespawnTriggered) return;
+      poisonRespawnTriggered = true;
+
+      const px = Math.floor(player.x / TILE);
+      const py = Math.floor(player.y / TILE);
+      const count = 10 + Math.floor(Math.random() * 21); // 10~30
+
+      let spawned = 0;
+      let attempts = 0;
+      while (spawned < count && attempts < count * 5) {
+        attempts++;
+        const rx = Math.max(1, Math.min(WORLD_W - 2, px + Math.floor(Math.random() * 41) - 20));
+        const ry = Math.max(1, Math.min(WORLD_H - 2, py + Math.floor(Math.random() * 20) - 5));
+
+        // 检查地下深处：头顶有5+实心方块
+        let solidAbove = 0;
+        for (let i = 1; i <= 5; i++) {
+          if (ry - i < 0) break;
+          const b = world[ry - i][rx];
+          if (b !== 'air' && b !== 'water' && b !== 'poison_gas') solidAbove++;
+        }
+
+        if (solidAbove >= 5 && world[ry][rx] === 'air') {
+          world[ry][rx] = 'poison_gas';
+          spawned++;
+        }
+      }
+
+      rebuildPoisonClusters();
+      if (spawned > 0) showMessage('☠️ 地下涌出毒气！');
+    }
+
+    function rebuildPoisonClusters() {
+      const visited = new Set();
+      poisonGasClusters = [];
+
+      for (let y = 0; y < WORLD_H; y++) {
+        for (let x = 0; x < WORLD_W; x++) {
+          if (world[y][x] === 'poison_gas' && !visited.has(x + ',' + y)) {
+            // BFS找cluster
+            const blocks = [];
+            const queue = [[x, y]];
+            visited.add(x + ',' + y);
+
+            while (queue.length > 0) {
+              const [cx, cy] = queue.shift();
+              blocks.push({ x: cx, y: cy });
+
+              const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
+              for (const [dx, dy] of dirs) {
+                const nx = cx + dx, ny = cy + dy;
+                const key = nx + ',' + ny;
+                if (!visited.has(key) && nx >= 0 && nx < WORLD_W && ny >= 0 && ny < WORLD_H && world[ny][nx] === 'poison_gas') {
+                  visited.add(key);
+                  queue.push([nx, ny]);
+                }
+              }
+            }
+
+            if (blocks.length > 0) {
+              poisonGasClusters.push({ id: Date.now() + Math.random(), blocks, frontier: findFrontier(blocks) });
+            }
+          }
+        }
+      }
+    }
+
+    function findFrontier(blocks) {
+      const frontier = [];
+      const blockSet = new Set(blocks.map(b => b.x + ',' + b.y));
+
+      for (const { x, y } of blocks) {
+        const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
+        for (const [dx, dy] of dirs) {
+          const nx = x + dx, ny = y + dy;
+          const key = nx + ',' + ny;
+          if (nx >= 0 && nx < WORLD_W && ny >= 0 && ny < WORLD_H && !blockSet.has(key) && world[ny][nx] === 'air') {
+            if (!frontier.some(f => f.x === nx && f.y === ny)) {
+              frontier.push({ x: nx, y: ny });
+            }
+          }
+        }
+      }
+      return frontier;
+    }
+
+    function getPoisonClusterSize(sx, sy) {
+      if (world[sy][sx] !== 'poison_gas') return 0;
+      const visited = new Set();
+      const queue = [[sx, sy]];
+      visited.add(sx + ',' + sy);
+      let count = 0;
+      while (queue.length > 0) {
+        const [cx, cy] = queue.shift();
+        count++;
+        const dirs = [[0,-1],[0,1],[-1,0],[1,0]];
+        for (const [dx, dy] of dirs) {
+          const nx = cx + dx, ny = cy + dy;
+          const key = nx + ',' + ny;
+          if (!visited.has(key) && nx >= 0 && nx < WORLD_W && ny >= 0 && ny < WORLD_H && world[ny][nx] === 'poison_gas') {
+            visited.add(key);
+            queue.push([nx, ny]);
+          }
+        }
+      }
+      return count;
     }
 
     function burst(x, y, color) {
@@ -702,53 +832,6 @@
         }
         world = newWorld;
       }
-      // 毒气生成与蔓延（每10秒）
-      poisonTickAccum = (poisonTickAccum || 0) + dt;
-      if (poisonTickAccum >= 10) {
-        poisonTickAccum = 0;
-        const px = Math.floor(player.x / TILE);
-        const py = Math.floor(player.y / TILE);
-        // 地下判定：头顶有5格以上实心方块即为深处
-        let solidAbove = 0;
-        for (let i = 1; i <= 10; i++) {
-          if (py - i < 0) break;
-          const b = px >= 0 && px < WORLD_W ? world[py - i][px] : 'air';
-          if (b !== 'air' && b !== 'water' && b !== 'poison_gas') solidAbove++;
-        }
-        if (solidAbove >= 5 && py > 5) {
-          const spotX = Math.max(0, Math.min(WORLD_W - 1, px + Math.floor(Math.random() * 7) - 3));
-          const spotY = Math.max(0, Math.min(WORLD_H - 1, py + Math.floor(Math.random() * 3)));
-          if (world[spotY][spotX] === 'air') {
-            world[spotY][spotX] = 'poison_gas';
-          }
-        }
-        // 毒气蔓延
-        const newWorld2 = world.map(r => [...r]);
-        for (let y = 0; y < WORLD_H; y++) {
-          for (let x = 0; x < WORLD_W; x++) {
-            if (world[y][x] === 'poison_gas' && Math.random() < 0.3) {
-              const dirs = [[0, -1], [0, 1], [-1, 0], [1, 0]];
-              const [dx, dy] = dirs[Math.floor(Math.random() * dirs.length)];
-              const nx = x + dx, ny = y + dy;
-              if (nx >= 0 && nx < WORLD_W && ny >= 0 && ny < WORLD_H && newWorld2[ny][nx] === 'air') {
-                newWorld2[ny][nx] = 'poison_gas';
-              }
-            }
-          }
-        }
-        world = newWorld2;
-        // 玩家接触毒气扣血
-        const pbx = Math.floor(player.x / TILE);
-        const pby = Math.floor(player.y / TILE);
-        for (let dy = 0; dy <= 1; dy++) {
-          for (let dx = 0; dx <= 1; dx++) {
-            const x = pbx + dx;
-            const y = pby + dy;
-            if (x >= 0 && x < WORLD_W && y >= 0 && y < WORLD_H && world[y][x] === 'poison_gas') {
-              player.health = Math.max(0, player.health - 0.8);
-              if (Math.random() < 0.03) showMessage('☠️ 毒气侵蚀！');
-              break;
-            }
           }
         }
       }
