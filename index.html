@@ -922,8 +922,19 @@
         b.vy += ddy * 0.5;
         b.vx *= 0.92;
         b.vy *= 0.92;
-        b.x += b.vx * dt;
-        b.y += b.vy * dt;
+        // 碰撞检测：不能穿过实心方块
+        const nextBx = b.x + b.vx * dt;
+        const nextBy = b.y + b.vy * dt;
+        const bcx = Math.floor((nextBx + b.w / 2) / TILE);
+        const bcy = Math.floor((nextBy + b.h / 2) / TILE);
+        if (bcx >= 0 && bcx < WORLD_W && bcy >= 0 && bcy < WORLD_H && (!BLOCKS[world[bcy][bcx]] || !BLOCKS[world[bcy][bcx]].solid)) {
+          b.x = nextBx;
+          b.y = nextBy;
+        } else {
+          // 撞墙则停止水平移动
+          b.vx = 0;
+          b.vy = 0;
+        }
         // 发射毒针
         b.shootTimer -= dt;
         if (b.shootTimer <= 0) {
@@ -939,8 +950,16 @@
       // 毒针移动与命中
       for (let i = beeStingers.length - 1; i >= 0; i--) {
         const s = beeStingers[i];
-        s.x += s.vx * dt;
-        s.y += s.vy * dt;
+        const nextX = s.x + s.vx * dt;
+        const nextY = s.y + s.vy * dt;
+        // 碰到实心方块则消失
+        const nbx = Math.floor(nextX / TILE), nby = Math.floor(nextY / TILE);
+        if (nbx >= 0 && nbx < WORLD_W && nby >= 0 && nby < WORLD_H && BLOCKS[world[nby][nbx]] && BLOCKS[world[nby][nbx]].solid) {
+          beeStingers.splice(i, 1);
+          continue;
+        }
+        s.x = nextX;
+        s.y = nextY;
         s.life -= dt;
         // 命中玩家（用格子坐标比较）
         const sjx = Math.floor(s.x / TILE), sjy = Math.floor(s.y / TILE);
